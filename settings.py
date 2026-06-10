@@ -15,6 +15,11 @@ SPRITES_DIR: Path = ASSETS_DIR / "sprites"
 SOUNDS_DIR: Path = ASSETS_DIR / "sounds"
 SAVES_DIR: Path = BASE_DIR / "saves"
 
+# Тайлы
+TILE_SIZE: int = 32
+TILE_FLOOR_COLOR: tuple[int, int, int] = (45, 45, 55)
+TILE_WALL_COLOR: tuple[int, int, int] = (75, 75, 95)
+
 # Цвета
 BLACK: tuple[int, int, int] = (0, 0, 0)
 WHITE: tuple[int, int, int] = (255, 255, 255)

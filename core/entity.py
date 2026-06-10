@@ -15,7 +15,7 @@ class Entity(GameObject):
         """Жива ли сущность."""
         return self.health.is_alive
 
-    def take_damage(self, amount: int) -> None:
+    def take_damage(self, amount: float) -> None:
         """Нанести урон. Делегирует компоненту, затем оркестрирует события."""
         self.health.take_damage(amount)
         if not self.is_alive:
@@ -24,7 +24,7 @@ class Entity(GameObject):
         else:
             EventBus.emit("entity_damaged", {"entity": self, "amount": amount})
 
-    def heal(self, amount: int) -> None:
+    def heal(self, amount: float) -> None:
         """Восстановить HP, не превышая максимум."""
         self.health.heal(amount)
         EventBus.emit("entity_healed", {"entity": self, "amount": amount})

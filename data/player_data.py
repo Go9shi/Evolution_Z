@@ -9,3 +9,6 @@ class PlayerData:
     speed: float
     width: int
     height: int
+    max_hunger: float = 100.0
+    hunger_decay_rate: float = 2.0
+    hunger_damage_rate: float = 5.0
