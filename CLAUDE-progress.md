@@ -1,4 +1,4 @@
-# claude-progress.md — Evolution Z
+# CLAUDE-progress.md — Evolution Z
 
 Этот файл обновляется вручную после каждой рабочей сессии.
 Помогает Claude Code быстро восстановить контекст при следующем запуске.
@@ -7,63 +7,70 @@
 
 ## Текущий статус
 
-**Фаза:** Проектирование  
-**Спринт:** 1 — Структура и документация  
-**Дата последнего обновления:** 2025
+**Фаза:** Активная разработка  
+**Спринт:** 3 — Карта + Коллизии  
+**Дата последнего обновления:** 2026-06-10
 
 ---
 
 ## Что сделано
 
-### Документация
-- [x] `game_design.md` — название, жанр, вдохновение, цель, механики, главы
-- [x] `architecture.md` — слои, схемы наследования и композиции, ООП-таблица
-- [x] `CLAUDE.md` — правила архитектуры, стиль кода, запреты
-- [x] `claude-progress.md` — этот файл
+### Спринт 1 — Структура и документация ✅
+- [x] `game_design.md`, `architecture.md`, `CLAUDE.md`, `CLAUDE-progress.md`
+- [x] Папочная структура, 56 пустых стабов
+- [x] `requirements.txt` — pygame-ce, pytmx, ruff, mypy, pytest
 
-### Структура проекта
-- [x] Создана папка `project_eden/` со всеми подпапками
-- [x] Созданы пустые файлы для всех модулей (56 файлов)
-- [x] `project_eden.zip` — архив готов к скачиванию
+### Спринт 2 — Core + Player ✅
+- [x] `settings.py` — FPS=60, SCREEN_W=1280, SCREEN_H=720, пути, цвета
+- [x] `core/game_object.py` — `GameObject`: id-счётчик, pos (Vector2), active
+- [x] `core/entity.py` — `Entity(GameObject)`: делегирует HP в `HealthComponent`, EventBus
+- [x] `systems/event_bus.py` — pub/sub шина: `on`, `off`, `emit`, `clear`
+- [x] `systems/health.py` — `HealthComponent`: current, maximum, percentage, take_damage, heal, reset
+- [x] `systems/camera.py` — `Camera`: `follow(target_pos)`, даёт offset для рендера
+- [x] `entities/player.py` — `Player(Entity)`: WASD движение, `_read_input`, эмитит `player_moved`
+- [x] `ui/base_screen.py` — `BaseScreen`: интерфейс handle_event/update/draw
+- [x] `ui/game_screen.py` — `GameScreen(BaseScreen)`: владеет Player и Camera
+- [x] `main.py` — `Game` + `GameStateManager` (стек экранов), пуш GameScreen на старте
+- [x] `assets/data/player.json` — speed=220, max_health=100, size=32×32
+- [x] Запускаемый прототип: зелёный квадрат (игрок) на тёмно-сером фоне, WASD работает
+
+### Тесты — 38 тестов, все зелёные ✅
+- [x] `tests/conftest.py` — pygame_init (session), clean_event_bus (autouse)
+- [x] `tests/test_event_bus.py` — 6 тестов
+- [x] `tests/test_game_object.py` — 3 теста
+- [x] `tests/test_entity.py` — 10 тестов
+- [x] `tests/test_health_component.py` — 11 тестов
+- [x] `tests/test_camera.py` — 4 теста
+- [x] `tests/test_player.py` — 4 теста
 
 ---
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — ждём старта кодирования
+- [ ] Ничего — ждём старта Спринта 3
 
 ---
 
 ## Что делать дальше (бэклог)
 
-### Спринт 2 — Core + Player (следующий)
-- [ ] `settings.py` — константы: FPS, разрешение, цвета, пути
-- [ ] `core/game_object.py` — базовый класс `GameObject`
-- [ ] `core/entity.py` — класс `Entity` с инкапсуляцией здоровья
-- [ ] `systems/event_bus.py` — pub/sub шина событий
-- [ ] `entities/player.py` — движение WASD, анимация, камера
-- [ ] `systems/camera.py` — следование за игроком
-- [ ] Запускаемый прототип: окно + игрок ходит по пустой карте
-
-### Спринт 3 — Карта + Коллизии
-- [ ] Установить и проверить `pytmx`
-- [ ] `systems/game_world.py` — загрузка `.tmx`, рендер тайлов
-- [ ] Коллизии игрока со стенами
+### Спринт 3 — Карта + Коллизии (следующий)
+- [ ] `systems/game_world.py` — загрузка `.tmx` через pytmx, рендер тайлов
+- [ ] Коллизии игрока со стенами (слой объектов из TMX)
 - [ ] `assets/maps/bunker_a1.tmx` — создать первую карту в Tiled
-- [ ] Запускаемый прототип: игрок ходит по карте бункера
+- [ ] Обновить `GameScreen`: передавать `GameWorld` в `update` и `draw`
+- [ ] Запускаемый прототип: игрок ходит по карте бункера, стены блокируют
 
 ### Спринт 4 — Боёвка
 - [ ] `core/weapon.py` — базовый класс оружия
 - [ ] `entities/weapons/pistol.py` — первое оружие
-- [ ] `entities/bullet.py` — пуля как объект
-- [ ] `systems/combat.py` — хитбоксы, урон, смерть
-- [ ] `systems/health.py` — компонент здоровья
+- [ ] `entities/bullet.py` — пуля как GameObject
+- [ ] `systems/combat.py` — хитбоксы, урон, группы спрайтов
+- [x] `systems/health.py` — ✅ сделано досрочно
 - [ ] Запускаемый прототип: игрок стреляет, пули летят
 
 ### Спринт 5 — Враги
-- [ ] `core/entity.py` — AI-стейты: IDLE, PATROL, CHASE, ATTACK
-- [ ] `entities/zombie.py` — базовый `Zombie` + `WalkerZombie`
-- [ ] `entities/zombie.py` — `RunnerZombie`, `SpitterZombie`
+- [ ] AI-стейты в Entity: IDLE, PATROL, CHASE, ATTACK
+- [ ] `entities/zombie.py` — `Zombie(Entity)` + `WalkerZombie`, `RunnerZombie`, `SpitterZombie`
 - [ ] Спавн врагов через TMX object layer
 - [ ] Запускаемый прототип: враги патрулируют, реагируют, умирают
 
@@ -89,16 +96,15 @@
 - [ ] Сюжетные события глав 1–3
 
 ### Спринт 9 — Финальный босс
-- [ ] `entities/boss.py` — базовый `Boss`
-- [ ] `entities/boss.py` — `PatientZeroBoss` с тремя фазами
+- [ ] `entities/boss.py` — базовый `Boss(Entity)` + `PatientZeroBoss` (3 фазы)
 - [ ] `assets/maps/eden7.tmx` — арена финального боя
 - [ ] Логика концовок: хорошая / плохая
 
 ### Спринт 10 — Полировка
 - [ ] `systems/save_system.py` — сохранение / загрузка JSON
-- [ ] `ui/main_menu.py` — главное меню со слотами
+- [ ] `ui/main_menu.py` — главное меню со слотами сохранений
 - [ ] `systems/audio.py` — SFX и музыка
-- [ ] HUD: HP-бар, миникарта, трекер квестов
+- [ ] HUD: HP-бар (через `player.health.percentage`), миникарта, трекер квестов
 - [ ] Финальное тестирование прохождения 25–35 мин
 
 ---
@@ -107,10 +113,14 @@
 
 | Дата | Решение | Причина |
 |---|---|---|
-| 2025 | EventBus вместо прямых зависимостей | развязать системы между собой |
-| 2025 | Стек экранов вместо флагов | чистое управление состоянием |
-| 2025 | JSON-конфиги для всех данных | нет магических чисел, легко балансировать |
-| 2025 | pygame-ce вместо pygame | активно поддерживается, лучше производительность |
+| 2026-06-10 | EventBus вместо прямых зависимостей | развязать системы между собой |
+| 2026-06-10 | Стек экранов вместо булевых флагов | чистое управление состоянием |
+| 2026-06-10 | JSON-конфиги для всех данных | нет магических чисел, легко балансировать |
+| 2026-06-10 | pygame-ce вместо pygame | активно поддерживается, лучше производительность |
+| 2026-06-10 | `HealthComponent` как отдельный класс | демонстрация композиции; Entity делегирует, не хранит int |
+| 2026-06-10 | `entity.health` возвращает `HealthComponent` | `player.health.percentage` готово для HP-бара в HUD |
+| 2026-06-10 | EventBus-события остались в Entity, не в HealthComponent | компонент чистый; Entity оркестрирует побочные эффекты |
+| 2026-06-10 | `GameStateManager` в `main.py`, `GameScreen` пушится снаружи | `Game` остаётся generic, не знает о конкретных экранах |
 
 ---
 
@@ -118,15 +128,16 @@
 
 | # | Описание | Приоритет | Статус |
 |---|---|---|---|
-| — | Пока проблем нет — проект на стадии структуры | — | — |
+| 1 | Нет карты — игрок ходит по пустому фону | высокий | Спринт 3 |
+| 2 | Нет визуального подтверждения движения (камера следит, фон однородный) | средний | Решится в Спринте 3 с тайлами |
 
 ---
 
 ## Заметки
 
-> Сюда пиши всё что важно помнить, но не входит в другие разделы.
-> Например: «AI зомби пока не работает при спавне у стен» или
-> «карта bunker_b3 требует особой логики для питания».
+> `player.health` — это `HealthComponent`, не int. Для получения числа: `player.health.current`.  
+> Для HP-бара: `player.health.percentage` (float 0.0–1.0).  
+> При смене сцены вызывать `EventBus.clear()`.
 
 ---
 

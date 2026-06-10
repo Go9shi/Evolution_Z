@@ -22,7 +22,7 @@ def test_rect_centered_on_spawn(player):
 
 def test_health_comes_from_config(config):
     p = Player(0, 0, config)
-    assert p.health == config.max_health
+    assert p.health.current == config.max_health
 
 
 def test_update_moves_player(player, monkeypatch):
