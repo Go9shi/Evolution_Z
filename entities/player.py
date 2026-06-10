@@ -1,9 +1,17 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import pygame
 
 from core.entity import Entity
 from data.player_data import PlayerData
 from systems.event_bus import EventBus
 from systems.hunger import HungerComponent
+
+if TYPE_CHECKING:
+    from core.weapon import Weapon
+    from entities.bullet import Bullet
 
 
 class Player(Entity):
@@ -20,14 +28,27 @@ class Player(Entity):
         self.hunger: HungerComponent = HungerComponent(
             config.max_hunger, config.hunger_decay_rate
         )
+        self._weapon: Weapon | None = None
 
     @property
     def rect(self) -> pygame.Rect:
         """Прямоугольник для коллизий и рендера."""
         return self._rect
 
+    def equip(self, weapon: Weapon) -> None:
+        """Экипировать оружие."""
+        self._weapon = weapon
+
+    def fire(self, direction: pygame.Vector2) -> list[Bullet]:
+        """Выстрелить в direction. Делегирует оружию; возвращает [] без оружия или при кулдауне."""
+        if self._weapon is None:
+            return []
+        return self._weapon.fire(self.pos, direction)
+
     def update(self, dt: float, walls: list[pygame.Rect] | None = None) -> None:
-        """Обработка голода, ввода WASD, перемещения и коллизий."""
+        """Обработка кулдауна оружия, голода, ввода WASD, перемещения и коллизий."""
+        if self._weapon is not None:
+            self._weapon.update(dt)
         self.hunger.update(dt)
         if self.hunger.is_starving:
             self.take_damage(self._hunger_damage_rate * dt)

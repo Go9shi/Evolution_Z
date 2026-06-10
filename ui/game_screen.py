@@ -4,16 +4,19 @@ import pygame
 
 from data.enemy_data import EnemyData
 from data.player_data import PlayerData
+from data.weapon_config import WeaponConfig
 from entities.player import Player
+from entities.weapons.pistol import Pistol
 from entities.zombie import RunnerZombie, WalkerZombie, Zombie
 from settings import DATA_DIR, TILE_SIZE
 from systems.camera import Camera
+from systems.combat import CombatSystem
 from systems.game_world import GameWorld
 from ui.base_screen import BaseScreen
 
 
 class GameScreen(BaseScreen):
-    """Главный игровой экран. Владеет миром, игроком, камерой и врагами."""
+    """Главный игровой экран. Владеет миром, игроком, камерой, врагами и боевой системой."""
 
     # Стартовая позиция игрока — центр комнаты 1 (tile 12, 6)
     _START_X: float = 12 * TILE_SIZE + TILE_SIZE / 2
@@ -22,24 +25,37 @@ class GameScreen(BaseScreen):
     def __init__(self) -> None:
         self._world = GameWorld()
         self._player = Player(self._START_X, self._START_Y, self._load_player_config())
+        self._player.equip(Pistol(self._load_weapon_config("pistol")))
         self._camera = Camera()
         self._enemies: list[Zombie] = self._spawn_enemies()
+        self._combat = CombatSystem()
+
+    def handle_event(self, event: pygame.event.Event) -> None:
+        """ЛКМ — выстрел в направлении курсора."""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            mouse_world = pygame.Vector2(event.pos) + self._camera.offset
+            direction = mouse_world - self._player.pos
+            bullets = self._player.fire(direction)
+            self._combat.add_bullets(bullets)
 
     def update(self, dt: float) -> None:
-        self._player.update(dt, self._world.wall_rects)
+        walls = self._world.wall_rects
+        self._player.update(dt, walls)
         self._camera.follow(self._player.pos)
 
-        walls = self._world.wall_rects
         for enemy in self._enemies:
             if enemy.active:
                 enemy.update(dt, walls, self._player)
         self._enemies = [e for e in self._enemies if e.active]
+
+        self._combat.update(dt, walls, self._enemies)
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill((20, 20, 25))
         self._world.draw(surface, self._camera.offset)
         for enemy in self._enemies:
             enemy.draw(surface, self._camera.offset)
+        self._combat.draw(surface, self._camera.offset)
         self._player.draw(surface, self._camera.offset)
 
     # ── private helpers ────────────────────────────────────────────────────
@@ -61,6 +77,12 @@ class GameScreen(BaseScreen):
     def _load_player_config() -> PlayerData:
         with open(DATA_DIR / "player.json", encoding="utf-8") as f:
             return PlayerData(**json.load(f))
+
+    @staticmethod
+    def _load_weapon_config(name: str) -> WeaponConfig:
+        with open(DATA_DIR / "weapons.json", encoding="utf-8") as f:
+            raw: dict[str, dict] = json.load(f)
+        return WeaponConfig(**raw[name])
 
     @staticmethod
     def _load_enemy_configs() -> dict[str, EnemyData]:

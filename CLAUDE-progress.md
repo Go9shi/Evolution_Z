@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 4 — Враги (ближний бой)  
+**Спринт:** 5A — Базовая боевая система ✅  
 **Дата последнего обновления:** 2026-06-11
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 4 завершён, ждём старта Спринта 5
+- [ ] Ничего — Спринт 5A завершён, ждём старта Спринта 5B
 
 ---
 
@@ -102,15 +102,30 @@
 
 ### Спринт 4 — Враги (ближний бой) ✅ (завершён)
 
-### Спринт 5 — Боёвка + SpitterZombie
-- [ ] `core/weapon.py` — базовый класс оружия
-- [ ] `entities/weapons/pistol.py` — первое оружие
-- [ ] `entities/bullet.py` — пуля как GameObject
-- [ ] `systems/combat.py` — хитбоксы, урон, группы спрайтов
+### Спринт 5A — Базовая боевая система ✅ (завершён)
+- [x] `data/weapon_config.py` — `WeaponConfig @dataclass`: damage, fire_rate, bullet_speed, bullet_range, bullet_size
+- [x] `assets/data/weapons.json` — конфиг pistol
+- [x] `core/weapon.py` — `Weapon(ABC)`: can_fire, update(dt), fire(pos, dir) → list[Bullet]
+- [x] `entities/bullet.py` — `Bullet(GameObject)`: velocity, damage, range_left, size, origin_tag, rect (AABB)
+- [x] `entities/weapons/pistol.py` — `Pistol(Weapon)`: fire() создаёт одну пулю, возвращает list[Bullet]
+- [x] `systems/combat.py` — `Targetable` Protocol + `CombatSystem`: пул пуль, AABB-попадания, EventBus
+- [x] `entities/player.py` — `equip(weapon)`, `fire(direction)`, тик оружия в `update()`
+- [x] `ui/game_screen.py` — MOUSEBUTTONDOWN → выстрел, CombatSystem в update/draw
+- [x] `tests/test_combat.py` — 26 тестов (WeaponConfig, Bullet, Pistol, CombatSystem, интеграционные)
+- [x] Запускаемый прототип: ЛКМ → пистолет стреляет → пуля летит → WalkerZombie / RunnerZombie получают урон → умирают
+
+### Тесты — 107 тестов, все зелёные ✅
++26 тестов в `tests/test_combat.py`:
+- WeaponConfig: поля, dataclass
+- Bullet: initial_state, движение, деактивация (стена / дальность), rect, damage/size/origin_tag
+- Pistol: fire() list[Bullet], кулдаун, нулевое направление, урон из конфига, тик
+- CombatSystem: add_bullets, движение, AABB-урон, деактивация, bullet_hit event, очистка пула, промах
+- Integration: полный цикл Player→Combat→Walker умирает; мёртвый враг не получает двойной урон
+
+### Спринт 5B — SpitterZombie (следующий)
 - [ ] `entities/zombie.py` — добавить `SpitterZombie` + `AIState.REPOSITION`
 - [ ] `assets/data/enemies.json` — конфиг spitter
-- [x] `systems/health.py` — ✅ сделано досрочно
-- [ ] Запускаемый прототип: игрок стреляет, Spitter плюётся, полный боевой цикл
+- [ ] Запускаемый прототип: Spitter отступает и плюётся, пули попадают в игрока
 
 ### Спринт 6 — Инвентарь + Предметы (бывший 5)
 
@@ -168,6 +183,10 @@
 | 2026-06-11 | `AIState` enum в `entities/zombie.py`, не в `core/` | состояния AI релевантны только врагам; Boss в Sprint 9 может полностью игнорировать enum |
 | 2026-06-11 | SpitterZombie перенесён в Sprint 5 (с Combat) | SpitterZombie нужен Bullet; реализация вместе с Combat-системой исключает временный код |
 | 2026-06-11 | Патруль через таймер (3 сек → разворот), не через детекцию стены | детекция стены при малом dt ненадёжна из-за целочисленного rounding; таймер детерминирован |
+| 2026-06-11 | `Weapon(ABC)` в `core/`, не GameObject | оружие — не позиционированный объект; ABC достаточно; TYPE_CHECKING для Bullet избегает core→entities |
+| 2026-06-11 | `Targetable` Protocol в `systems/combat.py` | CombatSystem не зависит от Zombie/Player; любой объект с active+pos+rect+take_damage подходит |
+| 2026-06-11 | AABB через `Bullet.rect.colliderect(target.rect)` | точнее distance-based; rect вычисляется on-the-fly из pos+size |
+| 2026-06-11 | `Player.fire(direction) → list[Bullet]` | Player владеет оружием (композиция); GameScreen только даёт направление и передаёт пули в CombatSystem |
 
 ---
 
@@ -178,7 +197,7 @@
 | 1 | ~~Нет карты — игрок ходит по пустому фону~~ | ~~высокий~~ | ✅ Решено в Спринте 3 |
 | 2 | Игрок умирает от голода без возможности поесть (еда появится в Спринте 6) | средний | Временно: `hunger_decay_rate=2.0` → опустошение за 50 сек; при необходимости снизить до 0.1 |
 | 3 | Camera не ограничена границами мира (может выйти за пределы карты) | низкий | Решится при добавлении TMX или в Спринте 10 |
-| 4 | Игрок не может убивать врагов (нет оружия) | средний | Решится в Спринте 5 (Combat) |
+| 4 | ~~Игрок не может убивать врагов (нет оружия)~~ | ~~средний~~ | ✅ Решено в Спринте 5A |
 
 ---
 
@@ -191,7 +210,11 @@
 > При смене сцены вызывать `EventBus.clear()`.  
 > `Zombie.update(dt, walls, player)` — player передаётся каждый кадр, не хранится в зомби.  
 > `enemy.active == False` → зомби убирается из списка в `GameScreen.update()` после итерации.  
-> `AIState` импортируется из `entities.zombie`, не из `core`.
+> `AIState` импортируется из `entities.zombie`, не из `core`.  
+> `player.fire(direction)` возвращает `list[Bullet]`; передать в `combat.add_bullets(bullets)`.  
+> `CombatSystem.update(dt, walls, targets)` — `targets` это `list[Targetable]`; Zombie удовлетворяет протоколу.  
+> `Weapon.update(dt)` тикается внутри `Player.update()` — GameScreen не трогает weapon напрямую.  
+> `Bullet.origin_tag == "player"` — пригодится в Sprint 5B, когда SpitterZombie будет создавать enemy-пули.
 
 ---
 
