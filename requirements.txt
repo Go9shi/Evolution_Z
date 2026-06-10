@@ -9,3 +9,8 @@ pygame-ce==2.5.7
 
 # загрузка карт Tiled (.tmx)
 pytmx==3.32
+
+# dev: QA-инструменты
+ruff
+mypy
+pytest
