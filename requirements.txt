@@ -1,0 +1,11 @@
+# Evolution Z — зависимости
+# Python 3.12.1
+#
+# Установка:
+#   pip install -r requirements.txt
+
+# рендер, ввод, звук (форк pygame с активной поддержкой)
+pygame-ce==2.5.7
+
+# загрузка карт Tiled (.tmx)
+pytmx==3.32
