@@ -75,5 +75,8 @@ class Game:
 
 
 if __name__ == "__main__":
+    from ui.game_screen import GameScreen
+
     game = Game()
+    game.state_manager.push(GameScreen())
     game.run()
