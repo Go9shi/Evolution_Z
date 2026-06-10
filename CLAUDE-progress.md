@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 5A — Базовая боевая система ✅  
+**Спринт:** 5B — SpitterZombie ✅  
 **Дата последнего обновления:** 2026-06-11
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 5A завершён, ждём старта Спринта 5B
+- [ ] Ничего — Спринт 5B завершён, ждём старта Спринта 6
 
 ---
 
@@ -122,10 +122,28 @@
 - CombatSystem: add_bullets, движение, AABB-урон, деактивация, bullet_hit event, очистка пула, промах
 - Integration: полный цикл Player→Combat→Walker умирает; мёртвый враг не получает двойной урон
 
-### Спринт 5B — SpitterZombie (следующий)
-- [ ] `entities/zombie.py` — добавить `SpitterZombie` + `AIState.REPOSITION`
-- [ ] `assets/data/enemies.json` — конфиг spitter
-- [ ] Запускаемый прототип: Spitter отступает и плюётся, пули попадают в игрока
+### Спринт 5B — SpitterZombie ✅ (завершён)
+- [x] `core/entity.py` — `faction: str = ""` для faction-фильтра в CombatSystem
+- [x] `entities/player.py` — `faction = "player"`
+- [x] `data/spitter_data.py` — `SpitterData(EnemyData)`: spit_damage, spit_speed, spit_range, safe_distance
+- [x] `entities/bullet.py` — `AcidBullet(Bullet)`: зелёный цвет, вся физика из Bullet
+- [x] `entities/zombie.py` — `AIState.REPOSITION` + `SpitterZombie` + `collect_spawned_bullets()`
+- [x] `systems/combat.py` — `faction` в `Targetable`, faction-фильтр в `_check_hits`, `rect` как `@property`
+- [x] `assets/data/enemies.json` — конфиг spitter (13 полей)
+- [x] `ui/game_screen.py` — SpitterZombie в комнате 4, сбор пуль, один CombatSystem для всех
+- [x] `tests/test_spitter.py` — 25 тестов
+- [x] Запускаемый прототип: Spitter отступает при сближении, плюётся кислотой, пули попадают в игрока
+
+### Тесты — 132 теста, все зелёные ✅
++25 тестов в `tests/test_spitter.py`:
+- SpitterData: наследование, базовые и дополнительные поля
+- AcidBullet: наследование, цвет, origin_tag, урон, движение
+- SpitterZombie: иерархия, faction, spawn
+- AI-переходы: PATROL / CHASE / ATTACK / REPOSITION
+- attack() + collect_spawned_bullets(): создание снаряда, дренаж очереди, кулдаун, нулевое направление
+- Полиморфизм: walker.collect_spawned_bullets() → []
+- Faction-фильтр: AcidBullet бьёт игрока, пропускает зомби
+- Интеграционный: update() → attack() → collect → AcidBullet создан
 
 ### Спринт 6 — Инвентарь + Предметы (бывший 5)
 
@@ -187,6 +205,10 @@
 | 2026-06-11 | `Targetable` Protocol в `systems/combat.py` | CombatSystem не зависит от Zombie/Player; любой объект с active+pos+rect+take_damage подходит |
 | 2026-06-11 | AABB через `Bullet.rect.colliderect(target.rect)` | точнее distance-based; rect вычисляется on-the-fly из pos+size |
 | 2026-06-11 | `Player.fire(direction) → list[Bullet]` | Player владеет оружием (композиция); GameScreen только даёт направление и передаёт пули в CombatSystem |
+| 2026-06-11 | `faction: str` на Entity; "player" / "enemy" на подклассах | один CombatSystem для всех пуль; фильтр `origin_tag == faction` предотвращает friendly fire |
+| 2026-06-11 | `collect_spawned_bullets() → list[Bullet]` на Zombie (default []) | SpitterZombie накапливает пули в `_pending_bullets`; GameScreen дренирует после каждого update — без EventBus и без каскада сигнатур |
+| 2026-06-11 | `SpitterData(EnemyData)` с 4 доп. полями | иерархия данных отражает иерархию сущностей; Walker/Runner не получают spitter-поля |
+| 2026-06-11 | `Targetable.rect` как `@property` в Protocol | `rect` read-only в Zombie/Player; property в Protocol устраняет mypy incompatibility |
 
 ---
 
@@ -214,7 +236,9 @@
 > `player.fire(direction)` возвращает `list[Bullet]`; передать в `combat.add_bullets(bullets)`.  
 > `CombatSystem.update(dt, walls, targets)` — `targets` это `list[Targetable]`; Zombie удовлетворяет протоколу.  
 > `Weapon.update(dt)` тикается внутри `Player.update()` — GameScreen не трогает weapon напрямую.  
-> `Bullet.origin_tag == "player"` — пригодится в Sprint 5B, когда SpitterZombie будет создавать enemy-пули.
+> `SpitterZombie.collect_spawned_bullets()` — вызывать после `enemy.update()` в GameScreen, до `_enemies` prune.
+> `AcidBullet.origin_tag == "enemy"` — faction-фильтр в CombatSystem не даёт кислоте бить зомби.
+> `_ENEMY_CONSTRUCTORS` dict в `game_screen.py` — диспетчер конструкторов; для нового врага добавить одну строку.
 
 ---
 

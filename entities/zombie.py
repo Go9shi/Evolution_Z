@@ -5,16 +5,19 @@ import pygame
 
 from core.entity import Entity
 from data.enemy_data import EnemyData
+from data.spitter_data import SpitterData
+from entities.bullet import AcidBullet, Bullet
 from systems.event_bus import EventBus
 
 
 class AIState(Enum):
-    """Состояния AI врагов. REPOSITION будет добавлен в Sprint 5 для SpitterZombie."""
+    """Состояния AI врагов."""
 
     IDLE = auto()
     PATROL = auto()
     CHASE = auto()
     ATTACK = auto()
+    REPOSITION = auto()
 
 
 class Zombie(Entity, ABC):
@@ -29,6 +32,7 @@ class Zombie(Entity, ABC):
 
     def __init__(self, x: float, y: float, data: EnemyData) -> None:
         super().__init__(x, y, data.max_health)
+        self.faction = "enemy"
         self._data: EnemyData = data
         self._state: AIState = AIState.IDLE
         self._attack_timer: float = 0.0
@@ -78,6 +82,10 @@ class Zombie(Entity, ABC):
     @abstractmethod
     def attack(self, target: Entity) -> None:
         """Атака цели. Каждый подкласс атакует по-своему (melee / ranged)."""
+
+    def collect_spawned_bullets(self) -> list[Bullet]:
+        """Возвращает снаряды, созданные с последнего вызова. По умолчанию — пусто."""
+        return []
 
     # ── render ─────────────────────────────────────────────────────────────
 
@@ -210,3 +218,69 @@ class RunnerZombie(Zombie):
         """Быстрый удар с низким уроном."""
         target.take_damage(self._data.damage)
         EventBus.emit("zombie_attacked", {"attacker": self, "target": target})
+
+
+class SpitterZombie(Zombie):
+    """Дальнобойный зомби. Плюётся кислотой, отступает при сближении с игроком."""
+
+    COLOR = (80, 180, 60)
+
+    def __init__(self, x: float, y: float, data: SpitterData) -> None:
+        super().__init__(x, y, data)
+        self._spitter_data: SpitterData = data
+        self._pending_bullets: list[AcidBullet] = []
+
+    def update_ai(
+        self, dt: float, walls: list[pygame.Rect], player: Entity
+    ) -> None:
+        player_pos = player.pos
+        distance = self.pos.distance_to(player_pos)
+
+        if not self._detect_player(player_pos):
+            self._state = AIState.PATROL
+            self._patrol(walls, dt)
+        elif distance < self._spitter_data.safe_distance:
+            self._state = AIState.REPOSITION
+            self._move_away_from(player_pos, walls, dt)
+        elif self._in_attack_range(player_pos):
+            self._state = AIState.ATTACK
+            if self.can_attack:
+                self.attack(player)
+                self._attack_timer = self._data.attack_cooldown
+        else:
+            self._state = AIState.CHASE
+            self._move_toward(player_pos, walls, dt)
+
+    def attack(self, target: Entity) -> None:
+        """Плевок кислотным снарядом в направлении цели."""
+        direction = target.pos - self.pos
+        if direction.length_squared() == 0:
+            return
+        direction.normalize_ip()
+        bullet = AcidBullet(
+            x=self.pos.x,
+            y=self.pos.y,
+            velocity=direction * self._spitter_data.spit_speed,
+            damage=self._spitter_data.spit_damage,
+            max_range=self._spitter_data.spit_range,
+            size=6,
+            origin_tag="enemy",
+        )
+        self._pending_bullets.append(bullet)
+        EventBus.emit("zombie_attacked", {"attacker": self, "target": target})
+
+    def collect_spawned_bullets(self) -> list[Bullet]:
+        """Возвращает накопленные кислотные снаряды и очищает очередь."""
+        bullets: list[Bullet] = list(self._pending_bullets)
+        self._pending_bullets = []
+        return bullets
+
+    def _move_away_from(
+        self, target_pos: pygame.Vector2, walls: list[pygame.Rect], dt: float
+    ) -> None:
+        """Движение прочь от target_pos — симметрично _move_toward."""
+        away_dir = self.pos - target_pos
+        if away_dir.length_squared() == 0:
+            return
+        flee_target = self.pos + away_dir.normalize() * 200
+        self._move_toward(flee_target, walls, dt)

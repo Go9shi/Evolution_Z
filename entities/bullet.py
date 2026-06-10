@@ -72,3 +72,9 @@ class Bullet(GameObject):
         screen_x = int(self.pos.x - offset.x)
         screen_y = int(self.pos.y - offset.y)
         pygame.draw.circle(surface, self.COLOR, (screen_x, screen_y), self._size)
+
+
+class AcidBullet(Bullet):
+    """Кислотный снаряд SpitterZombie. Физика из Bullet, отличается цветом."""
+
+    COLOR: tuple[int, int, int] = (100, 220, 50)

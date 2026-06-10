@@ -21,6 +21,7 @@ class Player(Entity):
 
     def __init__(self, x: float, y: float, config: PlayerData) -> None:
         super().__init__(x, y, config.max_health)
+        self.faction = "player"
         self._speed: float = config.speed
         self._rect: pygame.Rect = pygame.Rect(0, 0, config.width, config.height)
         self._rect.center = (int(x), int(y))

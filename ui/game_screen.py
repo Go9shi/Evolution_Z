@@ -1,18 +1,24 @@
 import json
+from typing import cast
 
 import pygame
 
 from data.enemy_data import EnemyData
 from data.player_data import PlayerData
+from data.spitter_data import SpitterData
 from data.weapon_config import WeaponConfig
 from entities.player import Player
 from entities.weapons.pistol import Pistol
-from entities.zombie import RunnerZombie, WalkerZombie, Zombie
+from entities.zombie import RunnerZombie, SpitterZombie, WalkerZombie, Zombie
 from settings import DATA_DIR, TILE_SIZE
 from systems.camera import Camera
 from systems.combat import CombatSystem
 from systems.game_world import GameWorld
 from ui.base_screen import BaseScreen
+
+_ENEMY_CONSTRUCTORS: dict[str, type[EnemyData]] = {
+    "spitter": SpitterData,
+}
 
 
 class GameScreen(BaseScreen):
@@ -46,9 +52,10 @@ class GameScreen(BaseScreen):
         for enemy in self._enemies:
             if enemy.active:
                 enemy.update(dt, walls, self._player)
+                self._combat.add_bullets(enemy.collect_spawned_bullets())
         self._enemies = [e for e in self._enemies if e.active]
 
-        self._combat.update(dt, walls, self._enemies)
+        self._combat.update(dt, walls, [*self._enemies, self._player])
 
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill((20, 20, 25))
@@ -64,6 +71,7 @@ class GameScreen(BaseScreen):
         configs = self._load_enemy_configs()
         w = configs["walker"]
         r = configs["runner"]
+        s = cast(SpitterData, configs["spitter"])
         ts = TILE_SIZE
         return [
             # Комната 2: два уокера
@@ -71,6 +79,8 @@ class GameScreen(BaseScreen):
             WalkerZombie(38 * ts + ts / 2, 8 * ts + ts / 2, w),
             # Комната 3: один раннер
             RunnerZombie(12 * ts + ts / 2, 17 * ts + ts / 2, r),
+            # Комната 4: один спиттер
+            SpitterZombie(37 * ts + ts / 2, 17 * ts + ts / 2, s),
         ]
 
     @staticmethod
@@ -88,4 +98,7 @@ class GameScreen(BaseScreen):
     def _load_enemy_configs() -> dict[str, EnemyData]:
         with open(DATA_DIR / "enemies.json", encoding="utf-8") as f:
             raw: dict[str, dict] = json.load(f)
-        return {name: EnemyData(**fields) for name, fields in raw.items()}
+        return {
+            name: _ENEMY_CONSTRUCTORS.get(name, EnemyData)(**fields)
+            for name, fields in raw.items()
+        }

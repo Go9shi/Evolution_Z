@@ -9,6 +9,7 @@ class Entity(GameObject):
     def __init__(self, x: float, y: float, max_health: int) -> None:
         super().__init__(x, y)
         self.health: HealthComponent = HealthComponent(max_health)
+        self.faction: str = ""
 
     @property
     def is_alive(self) -> bool:

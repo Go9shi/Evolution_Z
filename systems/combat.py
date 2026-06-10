@@ -11,7 +11,11 @@ class Targetable(Protocol):
 
     active: bool
     pos: pygame.Vector2
-    rect: pygame.Rect
+    faction: str
+
+    @property
+    def rect(self) -> pygame.Rect:
+        """AABB для коллизий."""
 
     def take_damage(self, amount: float) -> None:
         """Нанести урон объекту."""
@@ -61,6 +65,8 @@ class CombatSystem:
         b_rect = bullet.rect
         for target in targets:
             if not target.active:
+                continue
+            if bullet.origin_tag == target.faction:
                 continue
             if b_rect.colliderect(target.rect):
                 target.take_damage(bullet.damage)
