@@ -8,8 +8,8 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 3.5 — Hunger System  
-**Дата последнего обновления:** 2026-06-10
+**Спринт:** 4 — Враги (ближний бой)  
+**Дата последнего обновления:** 2026-06-11
 
 ---
 
@@ -69,11 +69,30 @@
 - `systems/game_world.py` — 89% (draw() требует display)
 - `entities/player.py` — 59% (рендер и _read_input требуют display/keyboard)
 
+### Спринт 4 — Враги (ближний бой) ✅
+- [x] `data/enemy_data.py` — `@dataclass EnemyData`: 9 полей (max_health, speed, damage, attack_range, detection_range, attack_cooldown, width, height, xp_reward)
+- [x] `assets/data/enemies.json` — конфиги walker и runner (без магических чисел в коде)
+- [x] `entities/zombie.py` — `AIState` enum (IDLE/PATROL/CHASE/ATTACK) + `Zombie(Entity, ABC)` с Template Method в `update()` + `WalkerZombie` + `RunnerZombie`
+- [x] `ui/game_screen.py` — список `_enemies`, полиморфный update/draw цикл, `_spawn_enemies()`, `_load_enemy_configs()`
+- [x] Запускаемый прототип: 2 уокера в комнате 2, 1 раннер в комнате 3; патрулируют, преследуют, атакуют
+
+### Тесты — 81 тест, все зелёные ✅
++23 теста в `tests/test_zombie.py`:
+- EnemyData: поля и типы
+- Иерархия: WalkerZombie → Zombie → Entity
+- Обнаружение: detection_range, attack_range
+- AI-переходы Walker: PATROL / CHASE / ATTACK
+- AI-переходы Runner: IDLE / CHASE / ATTACK
+- Атака: урон, событие, кулдаун, восстановление
+- Смерть: active=False, entity_died event
+- Полиморфизм: единый интерфейс update(), runner быстрее walker
+- Интеграционный: update() → attack() → HP игрока снижается
+
 ---
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 3.5 завершён, ждём старта Спринта 4
+- [ ] Ничего — Спринт 4 завершён, ждём старта Спринта 5
 
 ---
 
@@ -81,19 +100,19 @@
 
 ### Спринт 3 — Карта + Коллизии ✅ (завершён)
 
-### Спринт 4 — Боёвка
+### Спринт 4 — Враги (ближний бой) ✅ (завершён)
+
+### Спринт 5 — Боёвка + SpitterZombie
 - [ ] `core/weapon.py` — базовый класс оружия
 - [ ] `entities/weapons/pistol.py` — первое оружие
 - [ ] `entities/bullet.py` — пуля как GameObject
 - [ ] `systems/combat.py` — хитбоксы, урон, группы спрайтов
+- [ ] `entities/zombie.py` — добавить `SpitterZombie` + `AIState.REPOSITION`
+- [ ] `assets/data/enemies.json` — конфиг spitter
 - [x] `systems/health.py` — ✅ сделано досрочно
-- [ ] Запускаемый прототип: игрок стреляет, пули летят
+- [ ] Запускаемый прототип: игрок стреляет, Spitter плюётся, полный боевой цикл
 
-### Спринт 5 — Враги
-- [ ] AI-стейты в Entity: IDLE, PATROL, CHASE, ATTACK
-- [ ] `entities/zombie.py` — `Zombie(Entity)` + `WalkerZombie`, `RunnerZombie`, `SpitterZombie`
-- [ ] Спавн врагов через TMX object layer
-- [ ] Запускаемый прототип: враги патрулируют, реагируют, умирают
+### Спринт 6 — Инвентарь + Предметы (бывший 5)
 
 ### Спринт 6 — Инвентарь + Предметы
 - [ ] `systems/inventory.py` — сетка слотов
@@ -144,6 +163,11 @@
 | 2026-06-10 | `GameStateManager` в `main.py`, `GameScreen` пушится снаружи | `Game` остаётся generic, не знает о конкретных экранах |
 | 2026-06-10 | `take_damage/heal` принимают `float` вместо `int` | дробный урон от голода (hunger_damage_rate * dt); `int` — частный случай `float` |
 | 2026-06-10 | `HungerComponent` не знает о `HealthComponent` | связь только через `Player.update()`: голод → `is_starving` → `take_damage()` → EventBus |
+| 2026-06-11 | `Zombie(Entity, ABC)` — ABC добавлен к Zombie, не к Entity | Entity остаётся чистым; Python корректно разрешает metaclass ABCMeta |
+| 2026-06-11 | Template Method в `Zombie.update()` | декремент таймера + вызов `update_ai()` — общая логика один раз; подклассы реализуют только хук |
+| 2026-06-11 | `AIState` enum в `entities/zombie.py`, не в `core/` | состояния AI релевантны только врагам; Boss в Sprint 9 может полностью игнорировать enum |
+| 2026-06-11 | SpitterZombie перенесён в Sprint 5 (с Combat) | SpitterZombie нужен Bullet; реализация вместе с Combat-системой исключает временный код |
+| 2026-06-11 | Патруль через таймер (3 сек → разворот), не через детекцию стены | детекция стены при малом dt ненадёжна из-за целочисленного rounding; таймер детерминирован |
 
 ---
 
@@ -154,6 +178,7 @@
 | 1 | ~~Нет карты — игрок ходит по пустому фону~~ | ~~высокий~~ | ✅ Решено в Спринте 3 |
 | 2 | Игрок умирает от голода без возможности поесть (еда появится в Спринте 6) | средний | Временно: `hunger_decay_rate=2.0` → опустошение за 50 сек; при необходимости снизить до 0.1 |
 | 3 | Camera не ограничена границами мира (может выйти за пределы карты) | низкий | Решится при добавлении TMX или в Спринте 10 |
+| 4 | Игрок не может убивать врагов (нет оружия) | средний | Решится в Спринте 5 (Combat) |
 
 ---
 
@@ -163,7 +188,10 @@
 > Для HP-бара: `player.health.percentage` (float 0.0–1.0).  
 > `player.hunger` — это `HungerComponent`. Для hunger-бара: `player.hunger.percentage`.  
 > `take_damage` / `heal` принимают `float` (не `int`) — дробный урон корректен.  
-> При смене сцены вызывать `EventBus.clear()`.
+> При смене сцены вызывать `EventBus.clear()`.  
+> `Zombie.update(dt, walls, player)` — player передаётся каждый кадр, не хранится в зомби.  
+> `enemy.active == False` → зомби убирается из списка в `GameScreen.update()` после итерации.  
+> `AIState` импортируется из `entities.zombie`, не из `core`.
 
 ---
 
