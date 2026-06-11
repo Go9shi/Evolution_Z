@@ -1,0 +1,16 @@
+{
+  "quests": [
+    {
+      "id": "clear_bunker_a1",
+      "title": "Clear Bunker A1",
+      "description": "Eliminate the infected roaming the bunker.",
+      "reward_xp": 100,
+      "objectives": [
+        {
+          "type": "kill_zombie",
+          "target_count": 4
+        }
+      ]
+    }
+  ]
+}

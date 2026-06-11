@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 8A — Quest System Core ✅  
+**Спринт:** 8C — Quest Data & Narrative Foundation ✅  
 **Дата последнего обновления:** 2026-06-11
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 8A завершён, ждём старта Спринта 8B
+- [ ] Ничего — Спринт 8C завершён, ждём старта следующего спринта
 
 ---
 
@@ -213,8 +213,26 @@
 - [x] `tests/test_quest_system.py` — 47 тестов: все требования Sprint 8A покрыты
 - [x] Вертикальный цикл: принять квест → убить зомби → завершить → XP → level up
 
-### Спринт 8B — Квесты + Нарратив (следующий)
-- [ ] `assets/data/quests.json` — данные квестов
+### Спринт 8B — Quest Log UI ✅ (завершён)
+- [x] `data/quest_data.py` — +полиморфное `Objective.progress` (abstract) → `KillZombieObjective.progress` возвращает `"current/target"`
+- [x] `ui/quest_log_ui.py` — `QuestLogUI(BaseScreen)`: только чтение через публичный API QuestSystem; UP/DOWN навигация, ESC закрытие; рендер title/description/status/прогресс целей; пустое состояние
+- [x] `ui/game_screen.py` — +`QuestSystem` (с `player.experience`); +стартовый квест `Clear Bunker A1` (4 зомби); +клавиша J → открывает `QuestLogUI` (lazy import, как Tab→SkillTreeUI)
+- [x] `tests/test_quest_log_ui.py` — 28 тестов
+- [x] `tests/test_quest_system.py` — +3 теста на `Objective.progress`
+- [x] Smoke-тест вертикального среза (headless): J → журнал → 4 убийства → квест завершён → XP → level up → ESC → возврат в игру
+
+### Тесты — 340 тестов, все зелёные ✅ (после Спринта 8B)
+
+### Спринт 8C — Quest Data & Narrative Foundation ✅ (завершён)
+- [x] `assets/data/quests.json` — данные квестов в JSON (формат `{"quests": [...]}` с `objectives[].type`)
+- [x] `data/quest_loader.py` — `load_quests(path)` + `QuestLoadError`; диспетчер `_OBJECTIVE_BUILDERS` (type → builder); валидация структуры, обязательных полей, неизвестных типов
+- [x] `ui/game_screen.py` — инлайн-квест `_make_starter_quest()` УДАЛЁН; `_load_quests()` читает `DATA_DIR/quests.json` и `accept_quest` для каждого
+- [x] `tests/test_quest_loader.py` — 29 тестов
+- [x] Smoke-тест (headless): квест из JSON → J → журнал → 4 убийства → завершён → XP 220 → level 2 → ESC
+
+### Тесты — 369 тестов, все зелёные ✅ (после Спринта 8C)
+
+### Спринт 8D — Нарратив (следующий)
 - [ ] `systems/lore.py` — записки и терминалы
 - [ ] `systems/dialogue.py` — диалоги
 - [ ] Сюжетные события глав 1–3
@@ -276,6 +294,14 @@
 | 2026-06-11 | `QuestSystem` подписывается на `entity_died`, не на гипотетический `zombie_killed` | `entity_died` — существующее событие; faction=="enemy" отфильтровывает не-зомби; нет необходимости в новом событии |
 | 2026-06-11 | `QuestSystem._try_complete` пропускает квест без целей | квест с пустым `objectives` не завершается автоматически; требует `complete_quest()` — предотвращает мгновенное завершение незаполненных квестов |
 | 2026-06-11 | `update_progress(event_data: dict)` публичный — `_on_entity_died` делегирует ему | публичный метод позволяет тестировать прогресс без EventBus; EventBus-подписка остаётся внутренней деталью |
+| 2026-06-11 | `Objective.progress` (abstract property) → str вместо isinstance в UI | UI отображает "3/5" полиморфно; `current_count`/`target_count` есть только у KillZombieObjective; isinstance запрещён CLAUDE.md; абстракция отдаёт готовую строку |
+| 2026-06-11 | `QuestLogUI(quest_system, on_close)` — держит ref на QuestSystem, читает `active_quests` в draw | не дублирует состояние квестов; `active_quests` возвращает копию → UI физически не может мутировать внутренний список; повторяет паттерн `SkillTreeUI(player, on_close)` |
+| 2026-06-11 | Клавиша J → QuestLogUI через lazy import в GameScreen | повторяет Tab→SkillTreeUI (Sprint 7C): GameScreen не импортирует UI на уровне модуля; depth>1 корректно обрабатывает ESC |
+| 2026-06-11 | Стартовый квест инлайн в `GameScreen._make_starter_quest()` | параллель `_spawn_enemies()` (позиции спавна тоже инлайн в GameScreen); JSON-загрузчик квестов отложен до Спринта 8C; Sprint 8B = только UI отображения |
+| 2026-06-11 | `quests.json` в `assets/data/`, не в `data/` | CLAUDE.md и все JSON-конфиги (enemies/items/weapons/player) лежат в `assets/data/`; там уже был пустой стаб `quests.json`; `data/` — пакет Python-структур. Репозиторий — источник истины, конвенция важнее буквального текста задачи |
+| 2026-06-11 | `data/quest_loader.py` — отдельный модуль `load_quests(path) → list[Quest]` | загрузчик зависит только от `quest_data` (+ json/pathlib); НЕ зависит от UI и QuestSystem; чистое преобразование JSON→объекты; GameScreen передаёт `DATA_DIR/quests.json` |
+| 2026-06-11 | `QuestLoadError` — единый тип ошибки загрузки | отсутствие файла, повреждённый JSON, неизвестный тип цели, нехватка полей — всё оборачивается в один тип; тестам и вызывающему коду достаточно ловить `QuestLoadError` |
+| 2026-06-11 | `_OBJECTIVE_BUILDERS: dict[str, Callable]` (type → builder) | data-driven диспетчер без isinstance; новый тип Objective = одна строка в dict; builder-функции локальны в модуле → нет circular import (в отличие от skill_tree, где dict на уровне модуля создавал бы цикл) |
 
 ---
 
@@ -323,6 +349,14 @@
 > EventBus-события квестов: входящее `entity_died`, исходящее `quest_completed` (data: `{"quest": quest}`).
 > Квест с пустым `objectives` не завершается через `update_progress` — только через `complete_quest()`.
 > `KillZombieObjective.on_kill("enemy")` не превышает `target_count` — guard `not self.is_complete` внутри метода.
+> `Objective.progress` — абстрактное property → str; `KillZombieObjective.progress` отдаёт `"current/target"`. Используется QuestLogUI для отображения без isinstance.
+> `QuestLogUI(quest_system, on_close)` — только чтение; навигация UP/DOWN, ESC закрывает. В GameScreen открывается по клавише J (lazy import), `on_close = state_manager.pop`.
+> `GameScreen._quest_system` — `QuestSystem(player.experience)`; стартовый квест `Clear Bunker A1` (KillZombieObjective=4) принимается в `__init__`. Прогресс идёт автоматически через подписку QuestSystem на `entity_died`.
+> EventBus: при гибели врага срабатывают ДВА независимых подписчика — `GameScreen._on_entity_died` (XP за килл) и `QuestSystem._on_entity_died` (прогресс квеста). Не конфликтуют.
+> `data/quest_loader.py` — `load_quests(path: Path) → list[Quest]`. Поднимает `QuestLoadError` при любой ошибке (нет файла / битый JSON / неизвестный тип цели / нет обязательных полей).
+> Формат `quests.json`: `{"quests": [{id, title, description, reward_xp, objectives: [{type, ...}]}]}`. Тип цели `"kill_zombie"` требует `target_count`.
+> Новый тип Objective в JSON → добавить builder и строку в `_OBJECTIVE_BUILDERS` в `quest_loader.py` (плюс класс в `quest_data.py`). isinstance не используется.
+> `GameScreen._load_quests()` читает `DATA_DIR/quests.json`; инлайн-квестов в коде больше НЕТ. Стартовый квест уровня — `clear_bunker_a1` (4 зомби, 100 XP).
 
 ---
 

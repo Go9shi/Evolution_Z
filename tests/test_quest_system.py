@@ -114,6 +114,20 @@ class TestKillZombieObjective:
     def test_is_objective_subclass(self) -> None:
         assert isinstance(KillZombieObjective(target_count=1), Objective)
 
+    def test_progress_initial(self) -> None:
+        assert KillZombieObjective(target_count=5).progress == "0/5"
+
+    def test_progress_after_kill(self) -> None:
+        obj = KillZombieObjective(target_count=5)
+        obj.on_kill("enemy")
+        assert obj.progress == "1/5"
+
+    def test_progress_reaches_target(self) -> None:
+        obj = KillZombieObjective(target_count=2)
+        obj.on_kill("enemy")
+        obj.on_kill("enemy")
+        assert obj.progress == "2/2"
+
 
 # ── accept_quest ──────────────────────────────────────────────────────────────
 

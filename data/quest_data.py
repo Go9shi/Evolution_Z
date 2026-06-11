@@ -22,6 +22,11 @@ class Objective(ABC):
     def is_complete(self) -> bool:
         """Выполнена ли цель."""
 
+    @property
+    @abstractmethod
+    def progress(self) -> str:
+        """Человекочитаемый прогресс цели для отображения, напр. '3/5'."""
+
 
 class KillZombieObjective(Objective):
     """Цель: убить N зомби-врагов."""
@@ -39,6 +44,11 @@ class KillZombieObjective(Objective):
     def is_complete(self) -> bool:
         """Выполнена, когда убито target_count врагов."""
         return self.current_count >= self.target_count
+
+    @property
+    def progress(self) -> str:
+        """Прогресс в формате 'current/target', напр. '3/5'."""
+        return f"{self.current_count}/{self.target_count}"
 
 
 @dataclass

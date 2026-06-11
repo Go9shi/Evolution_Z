@@ -6,6 +6,8 @@ import pygame
 from core.item import Item
 from data.enemy_data import EnemyData
 from data.player_data import PlayerData
+from data.quest_data import Quest
+from data.quest_loader import load_quests
 from data.spitter_data import SpitterData
 from data.weapon_config import WeaponConfig
 from entities.items.food_item import FoodItem
@@ -18,6 +20,7 @@ from systems.camera import Camera
 from systems.combat import CombatSystem
 from systems.event_bus import EventBus
 from systems.game_world import GameWorld
+from systems.quest_system import QuestSystem
 from ui.base_screen import BaseScreen
 
 _ENEMY_CONSTRUCTORS: dict[str, type[EnemyData]] = {
@@ -41,10 +44,13 @@ class GameScreen(BaseScreen):
         self._enemies: list[Zombie] = self._spawn_enemies()
         self._combat = CombatSystem()
         self._world_items: list[Item] = self._spawn_items()
+        self._quest_system = QuestSystem(self._player.experience)
+        for quest in self._load_quests():
+            self._quest_system.accept_quest(quest)
         EventBus.on("entity_died", self._on_entity_died)
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        """ЛКМ — выстрел. F — использовать предмет. Tab — дерево навыков."""
+        """ЛКМ — выстрел. F — предмет. Tab — дерево навыков. J — журнал квестов."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_world = pygame.Vector2(event.pos) + self._camera.offset
             direction = mouse_world - self._player.pos
@@ -58,6 +64,10 @@ class GameScreen(BaseScreen):
             if self._state_manager is not None:
                 from ui.skill_tree_ui import SkillTreeUI
                 self._state_manager.push(SkillTreeUI(self._player, self._state_manager.pop))
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_j:
+            if self._state_manager is not None:
+                from ui.quest_log_ui import QuestLogUI
+                self._state_manager.push(QuestLogUI(self._quest_system, self._state_manager.pop))
 
     def update(self, dt: float) -> None:
         walls = self._world.wall_rects
@@ -104,6 +114,11 @@ class GameScreen(BaseScreen):
             # Комната 4: один спиттер
             SpitterZombie(37 * ts + ts / 2, 17 * ts + ts / 2, s),
         ]
+
+    @staticmethod
+    def _load_quests() -> list[Quest]:
+        """Загрузить квесты уровня из assets/data/quests.json."""
+        return load_quests(DATA_DIR / "quests.json")
 
     @staticmethod
     def _load_player_config() -> PlayerData:
