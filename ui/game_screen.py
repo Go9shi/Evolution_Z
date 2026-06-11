@@ -1,5 +1,5 @@
 import json
-from typing import cast
+from typing import Any, cast
 
 import pygame
 
@@ -16,6 +16,7 @@ from entities.zombie import RunnerZombie, SpitterZombie, WalkerZombie, Zombie
 from settings import DATA_DIR, TILE_SIZE
 from systems.camera import Camera
 from systems.combat import CombatSystem
+from systems.event_bus import EventBus
 from systems.game_world import GameWorld
 from ui.base_screen import BaseScreen
 
@@ -39,6 +40,7 @@ class GameScreen(BaseScreen):
         self._enemies: list[Zombie] = self._spawn_enemies()
         self._combat = CombatSystem()
         self._world_items: list[Item] = self._spawn_items()
+        EventBus.on("entity_died", self._on_entity_died)
 
     def handle_event(self, event: pygame.event.Event) -> None:
         """ЛКМ — выстрел. F — использовать первый доступный предмет из инвентаря."""
@@ -117,6 +119,12 @@ class GameScreen(BaseScreen):
             name: _ENEMY_CONSTRUCTORS.get(name, EnemyData)(**fields)
             for name, fields in raw.items()
         }
+
+    def _on_entity_died(self, data: dict[str, Any]) -> None:
+        """Начислить XP игроку при гибели врага."""
+        entity = data["entity"]
+        if entity.faction == "enemy":
+            self._player.add_xp(entity.xp_reward)
 
     @staticmethod
     def _load_item_configs() -> dict[str, dict]:

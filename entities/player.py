@@ -8,6 +8,7 @@ from core.entity import Entity
 from core.item import Item
 from data.player_data import PlayerData
 from systems.event_bus import EventBus
+from systems.experience import ExperienceComponent
 from systems.hunger import HungerComponent
 from systems.inventory import Inventory
 
@@ -33,6 +34,7 @@ class Player(Entity):
         )
         self._weapon: Weapon | None = None
         self._inventory: Inventory = Inventory()
+        self._experience: ExperienceComponent = ExperienceComponent()
 
     @property
     def rect(self) -> pygame.Rect:
@@ -43,6 +45,15 @@ class Player(Entity):
     def inventory(self) -> Inventory:
         """Инвентарь игрока."""
         return self._inventory
+
+    @property
+    def experience(self) -> ExperienceComponent:
+        """Компонент опыта и уровней игрока."""
+        return self._experience
+
+    def add_xp(self, amount: int) -> bool:
+        """Добавить XP. Делегирует ExperienceComponent; возвращает True при level-up."""
+        return self._experience.add_xp(amount)
 
     def equip(self, weapon: Weapon) -> None:
         """Экипировать оружие."""

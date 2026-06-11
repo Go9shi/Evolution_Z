@@ -58,6 +58,11 @@ class Zombie(Entity, ABC):
         """Прямоугольник для коллизий и рендера."""
         return self._rect
 
+    @property
+    def xp_reward(self) -> int:
+        """XP-награда за убийство этого врага."""
+        return self._data.xp_reward
+
     # ── Template Method ────────────────────────────────────────────────────
 
     def update(
