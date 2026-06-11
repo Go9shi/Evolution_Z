@@ -25,6 +25,11 @@ class GameStateManager:
         return self._stack[-1] if self._stack else None
 
     @property
+    def depth(self) -> int:
+        """Количество экранов в стеке."""
+        return len(self._stack)
+
+    @property
     def is_empty(self) -> bool:
         """Проверка, пуст ли стек."""
         return not self._stack
@@ -57,7 +62,10 @@ class Game:
             if event.type == pygame.QUIT:
                 self._running = False
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                self._running = False
+                # Quit only when no overlay (e.g. SkillTreeUI) is on top of the base screen.
+                # If depth > 1, ESC is passed to the current screen which handles closing itself.
+                if self.state_manager.depth <= 1:
+                    self._running = False
             if state:
                 state.handle_event(event)
 
@@ -78,5 +86,5 @@ if __name__ == "__main__":
     from ui.game_screen import GameScreen
 
     game = Game()
-    game.state_manager.push(GameScreen())
+    game.state_manager.push(GameScreen(game.state_manager))
     game.run()

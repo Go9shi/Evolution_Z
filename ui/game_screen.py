@@ -32,7 +32,8 @@ class GameScreen(BaseScreen):
     _START_X: float = 12 * TILE_SIZE + TILE_SIZE / 2
     _START_Y: float = 6 * TILE_SIZE + TILE_SIZE / 2
 
-    def __init__(self) -> None:
+    def __init__(self, state_manager: Any = None) -> None:
+        self._state_manager = state_manager
         self._world = GameWorld()
         self._player = Player(self._START_X, self._START_Y, self._load_player_config())
         self._player.equip(Pistol(self._load_weapon_config("pistol")))
@@ -43,7 +44,7 @@ class GameScreen(BaseScreen):
         EventBus.on("entity_died", self._on_entity_died)
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        """ЛКМ — выстрел. F — использовать первый доступный предмет из инвентаря."""
+        """ЛКМ — выстрел. F — использовать предмет. Tab — дерево навыков."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_world = pygame.Vector2(event.pos) + self._camera.offset
             direction = mouse_world - self._player.pos
@@ -53,6 +54,10 @@ class GameScreen(BaseScreen):
             for item in self._player.inventory.items:
                 if self._player.use_item(item):
                     break
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_TAB:
+            if self._state_manager is not None:
+                from ui.skill_tree_ui import SkillTreeUI
+                self._state_manager.push(SkillTreeUI(self._player, self._state_manager.pop))
 
     def update(self, dt: float) -> None:
         walls = self._world.wall_rects

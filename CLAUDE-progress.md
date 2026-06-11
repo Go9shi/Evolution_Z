@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 7B — Skill Tree Core ✅  
+**Спринт:** 7C — Skill Tree UI + ESC bugfix ✅  
 **Дата последнего обновления:** 2026-06-11
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 7B завершён, ждём старта Спринта 8
+- [ ] Ничего — Спринт 7C завершён, ждём старта Спринта 8
 
 ---
 
@@ -182,11 +182,28 @@
 - [x] `entities/player.py` — `_skill_tree`, `skill_tree` property, `apply_weapon_damage_bonus()`, подписка `player_level_up` → `_on_level_up` → `add_point()`
 - [x] `tests/test_skill_tree.py` — 36 тестов
 
-### Тесты — 224 теста, все зелёные ✅
+### Тесты — 224 теста, все зелёные ✅ (до Спринта 7C)
 
-### Спринт 7 (остаток) — UI дерева навыков
-- [ ] `ui/skill_tree_ui.py` — визуальное дерево
+### Спринт 7C — Skill Tree UI ✅ (завершён)
+- [x] `ui/skill_tree_ui.py` — `SkillTreeUI(BaseScreen)`: UP/DOWN навигация, ENTER прокачка, ESC закрытие, текстовый оверлей с уровнями-барами
+- [x] `ui/game_screen.py` — +Tab → открывает `SkillTreeUI`; +опциональный `state_manager` в `__init__`
+- [x] `main.py` — передаёт `state_manager` в `GameScreen`
+- [x] `tests/test_skill_tree_ui.py` — 27 тестов
 - [x] `systems/hunger.py` — ✅ сделано досрочно (Спринт 3.5)
+
+### Тесты — 251 тест, все зелёные ✅ (до багфикса)
+
+### Спринт 7C — багфикс: двойная обработка ESC ✅
+**Баг:** ESC при открытом SkillTreeUI одновременно закрывал UI и завершал игру.
+**Причина:** `main.py._handle_events` безусловно выставлял `_running=False` на K_ESCAPE, затем передавал событие в `SkillTreeUI`.
+**Фикс:** `GameStateManager.depth` property + проверка `depth <= 1` перед выходом.
+- [x] `main.py` — `GameStateManager.depth: int` property + `if depth <= 1: _running = False`
+- [x] `tests/test_skill_tree_ui.py` — +11 регрессионных тестов (TestGameStateManagerDepth × 5, TestEscRoutingRegression × 6)
+
+### Тесты — 262 теста, все зелёные ✅
++11 регрессионных тестов:
+- TestGameStateManagerDepth: depth=0/1/2, уменьшение при pop, pop на пустом стеке
+- TestEscRoutingRegression: ESC закрывает оверлей и оставляет базовый экран; depth>1 = оверлей открыт; depth=1 = разрешён выход; TAB→ESC→возврат к базовому; повторное открытие после закрытия; on_close ровно 1 раз
 
 ### Спринт 8 — Квесты + Нарратив
 - [ ] `systems/quest_system.py` — триггеры, цели, прогресс
@@ -244,6 +261,10 @@
 | 2026-06-11 | `_damage_bonus: float` в Weapon + `Pistol.fire()` суммирует `config.damage + _damage_bonus` | SkillTree не зависит от Pistol; Player.apply_weapon_damage_bonus() делегирует weapon; weapon хранит накопленный бонус |
 | 2026-06-11 | Публичные константы `HP_PER_LEVEL`, `DAMAGE_PER_LEVEL` и др. в `skill_tree.py` | доступны из тестов без дублирования магических чисел; аналогично `settings.py` паттерну |
 | 2026-06-11 | `_apply_effect` if/elif на `SkillType` enum (не isinstance) | SkillType конечен и контролируем; dispatch dict создал бы circular import на уровне модуля |
+| 2026-06-11 | `SkillTreeUI(player, on_close: Callable)` вместо зависимости на GameStateManager | GameStateManager в main.py; callable избегает circular import; тесты передают lambda |
+| 2026-06-11 | Lazy import `from ui.skill_tree_ui import SkillTreeUI` внутри метода в GameScreen | GameScreen не импортирует SkillTreeUI на уровне модуля; Tab-нажатие — редкое событие; исключает circular import |
+| 2026-06-11 | `state_manager: Any = None` в GameScreen.__init__ | default None сохраняет обратную совместимость; Any исключает зависимость GameScreen→main |
+| 2026-06-11 | `GameStateManager.depth <= 1` как условие выхода по ESC | depth>1 означает открытый оверлей (SkillTreeUI и любой будущий); при depth=1 ESC завершает игру как раньше |
 
 ---
 
@@ -282,6 +303,8 @@
 > `player.skill_tree` — `SkillTree`. `skill_tree.add_point()` вызывается через EventBus `player_level_up` (по одному разу на каждый level-up). `skill_tree.upgrade(SkillType.X, player)` — тратит 1 очко, применяет эффект. Константы: `HP_PER_LEVEL=20`, `HUNGER_REDUCTION_PER_LEVEL=0.5`, `DAMAGE_PER_LEVEL=5.0`, `MAX_SKILL_LEVEL=5`.
 > `player.apply_weapon_damage_bonus(bonus)` — передаёт бонус в `_weapon.add_damage_bonus()`; no-op если оружие не экипировано.
 > `weapon.damage_bonus` — накопленный бонус к урону от навыков. `Pistol.fire()` создаёт пулю с `config.damage + _damage_bonus`.
+> `SkillTreeUI(player, on_close)` — `on_close: Callable[[], None]`; в GameScreen передаётся `state_manager.pop`. Tab открывает, ESC закрывает.
+> `ui/skill_tree_ui.py` — `_SKILLS = list(SkillType)` — порядок навигации совпадает с порядком enum. `selected_skill` — публичный property для тестов.
 
 ---
 
