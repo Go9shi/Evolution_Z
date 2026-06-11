@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 5B — SpitterZombie ✅  
+**Спринт:** 6 — Inventory + Items ✅  
 **Дата последнего обновления:** 2026-06-11
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 5B завершён, ждём старта Спринта 6
+- [ ] Ничего — Спринт 6 завершён, ждём старта Спринта 7
 
 ---
 
@@ -134,7 +134,7 @@
 - [x] `tests/test_spitter.py` — 25 тестов
 - [x] Запускаемый прототип: Spitter отступает при сближении, плюётся кислотой, пули попадают в игрока
 
-### Тесты — 132 теста, все зелёные ✅
+### Тесты — 132 теста, все зелёные ✅ (до Спринта 6)
 +25 тестов в `tests/test_spitter.py`:
 - SpitterData: наследование, базовые и дополнительные поля
 - AcidBullet: наследование, цвет, origin_tag, урон, движение
@@ -145,15 +145,25 @@
 - Faction-фильтр: AcidBullet бьёт игрока, пропускает зомби
 - Интеграционный: update() → attack() → collect → AcidBullet создан
 
-### Спринт 6 — Инвентарь + Предметы (бывший 5)
+### Тесты — 162 теста, все зелёные ✅
++30 тестов в `tests/test_inventory.py`:
+- Inventory: add (success/full), remove (found/not found), contains, count, is_full
+- use_item: food consumed+removed, quest kept, not-in-inventory guard
+- FoodItem: use→True, restores hunger, clamps to maximum
+- QuestItem: use→False, иерархия, stackable=False
+- Player integration: pickup_item добавляет в инвентарь, деактивирует предмет, full guard, use_item восстанавливает голод
+- EventBus: inventory_item_added, inventory_item_removed, item_used, item_used not fired for quest
 
-### Спринт 6 — Инвентарь + Предметы
-- [ ] `systems/inventory.py` — сетка слотов
-- [ ] `core/item.py` — базовый предмет
-- [ ] `assets/data/items.json` — конфиги предметов
-- [ ] Подбор предметов с пола
-- [ ] `ui/inventory_ui.py` — отображение инвентаря
-- [ ] Компоненты вакцины как предметы
+### Спринт 6 — Инвентарь + Предметы ✅ (завершён)
+- [x] `assets/data/items.json` — конфиги canned_beans, ration_pack, vaccine_component_alpha/beta
+- [x] `core/item.py` — `Item(GameObject, ABC)`: item_id, name, description, stackable, rect, use(player) → bool, draw()
+- [x] `entities/items/food_item.py` — `FoodItem(Item)`: nutrition, use() → player.hunger.consume() → True
+- [x] `entities/items/quest_item.py` — `QuestItem(Item)`: use() → False (не расходуется)
+- [x] `systems/inventory.py` — `Inventory`: capacity=20, add/remove/contains/use_item, EventBus-события
+- [x] `entities/player.py` — `_inventory`, `inventory` property, `pickup_item(item)`, `use_item(item)`
+- [x] `ui/game_screen.py` — `_world_items`, подбор на коллизии, клавиша F — использовать первый предмет
+- [x] `tests/test_inventory.py` — 30 тестов
+- [x] Запускаемый прототип: игрок ходит над предметом → автоподбор; F → еда восстанавливает голод; квест-предметы сохраняются
 
 ### Спринт 7 — Прогрессия
 - [ ] XP и уровни в `Player`
@@ -209,6 +219,10 @@
 | 2026-06-11 | `collect_spawned_bullets() → list[Bullet]` на Zombie (default []) | SpitterZombie накапливает пули в `_pending_bullets`; GameScreen дренирует после каждого update — без EventBus и без каскада сигнатур |
 | 2026-06-11 | `SpitterData(EnemyData)` с 4 доп. полями | иерархия данных отражает иерархию сущностей; Walker/Runner не получают spitter-поля |
 | 2026-06-11 | `Targetable.rect` как `@property` в Protocol | `rect` read-only в Zombie/Player; property в Protocol устраняет mypy incompatibility |
+| 2026-06-11 | `Item(GameObject, ABC)` в `core/` | предмет — позиционированный объект с draw(); ABC для абстрактного use(); паттерн повторяет Zombie(Entity, ABC) |
+| 2026-06-11 | `Inventory.use_item(item, player)` с player как параметр | Inventory не хранит ref на Player; Player передаёт self → нет хранимой зависимости; TYPE_CHECKING устраняет circular import |
+| 2026-06-11 | Подбор предметов через `colliderect` в GameScreen, автоматически | нет отдельной клавиши подбора; ходить над предметом = подобрать; F — использовать первый доступный предмет (полиморфизм: quest пропускается, food применяется) |
+| 2026-06-11 | `entities/items/` субпакет для FoodItem и QuestItem | следует паттерну `entities/weapons/`; отдельная папка для подтипов одной категории |
 
 ---
 
@@ -217,7 +231,7 @@
 | # | Описание | Приоритет | Статус |
 |---|---|---|---|
 | 1 | ~~Нет карты — игрок ходит по пустому фону~~ | ~~высокий~~ | ✅ Решено в Спринте 3 |
-| 2 | Игрок умирает от голода без возможности поесть (еда появится в Спринте 6) | средний | Временно: `hunger_decay_rate=2.0` → опустошение за 50 сек; при необходимости снизить до 0.1 |
+| 2 | ~~Игрок умирает от голода без возможности поесть~~ | ~~средний~~ | ✅ Решено в Спринте 6: FoodItem + Inventory + автоподбор |
 | 3 | Camera не ограничена границами мира (может выйти за пределы карты) | низкий | Решится при добавлении TMX или в Спринте 10 |
 | 4 | ~~Игрок не может убивать врагов (нет оружия)~~ | ~~средний~~ | ✅ Решено в Спринте 5A |
 
@@ -239,6 +253,11 @@
 > `SpitterZombie.collect_spawned_bullets()` — вызывать после `enemy.update()` в GameScreen, до `_enemies` prune.
 > `AcidBullet.origin_tag == "enemy"` — faction-фильтр в CombatSystem не даёт кислоте бить зомби.
 > `_ENEMY_CONSTRUCTORS` dict в `game_screen.py` — диспетчер конструкторов; для нового врага добавить одну строку.
+> `player.inventory` — `Inventory` с capacity=20. `player.pickup_item(item)` — подбор; `player.use_item(item)` — делегирует `inventory.use_item(item, self)`.
+> `FoodItem.use(player)` — вызывает `player.hunger.consume(nutrition)`, всегда возвращает True.
+> `QuestItem.use(player)` — возвращает False, из инвентаря не удаляется.
+> EventBus-события инвентаря: `inventory_item_added`, `inventory_item_removed`, `item_used`.
+> В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
 
 ---
 

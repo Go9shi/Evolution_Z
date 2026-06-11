@@ -1,0 +1,24 @@
+{
+  "food": {
+    "canned_beans": {
+      "name": "Canned Beans",
+      "description": "A dented can of beans found in the bunker storage.",
+      "nutrition": 25.0
+    },
+    "ration_pack": {
+      "name": "Ration Pack",
+      "description": "Military emergency ration. Significantly restores hunger.",
+      "nutrition": 50.0
+    }
+  },
+  "quest": {
+    "vaccine_component_alpha": {
+      "name": "Vaccine Component Alpha",
+      "description": "First component of the EDEN vaccine. Handle with care."
+    },
+    "vaccine_component_beta": {
+      "name": "Vaccine Component Beta",
+      "description": "Second component of the EDEN vaccine. Almost there."
+    }
+  }
+}

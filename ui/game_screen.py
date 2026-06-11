@@ -3,10 +3,13 @@ from typing import cast
 
 import pygame
 
+from core.item import Item
 from data.enemy_data import EnemyData
 from data.player_data import PlayerData
 from data.spitter_data import SpitterData
 from data.weapon_config import WeaponConfig
+from entities.items.food_item import FoodItem
+from entities.items.quest_item import QuestItem
 from entities.player import Player
 from entities.weapons.pistol import Pistol
 from entities.zombie import RunnerZombie, SpitterZombie, WalkerZombie, Zombie
@@ -35,14 +38,19 @@ class GameScreen(BaseScreen):
         self._camera = Camera()
         self._enemies: list[Zombie] = self._spawn_enemies()
         self._combat = CombatSystem()
+        self._world_items: list[Item] = self._spawn_items()
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        """ЛКМ — выстрел в направлении курсора."""
+        """ЛКМ — выстрел. F — использовать первый доступный предмет из инвентаря."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_world = pygame.Vector2(event.pos) + self._camera.offset
             direction = mouse_world - self._player.pos
             bullets = self._player.fire(direction)
             self._combat.add_bullets(bullets)
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_f:
+            for item in self._player.inventory.items:
+                if self._player.use_item(item):
+                    break
 
     def update(self, dt: float) -> None:
         walls = self._world.wall_rects
@@ -57,9 +65,16 @@ class GameScreen(BaseScreen):
 
         self._combat.update(dt, walls, [*self._enemies, self._player])
 
+        for item in self._world_items:
+            if item.active and self._player.rect.colliderect(item.rect):
+                self._player.pickup_item(item)
+        self._world_items = [i for i in self._world_items if i.active]
+
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill((20, 20, 25))
         self._world.draw(surface, self._camera.offset)
+        for item in self._world_items:
+            item.draw(surface, self._camera.offset)
         for enemy in self._enemies:
             enemy.draw(surface, self._camera.offset)
         self._combat.draw(surface, self._camera.offset)
@@ -102,3 +117,28 @@ class GameScreen(BaseScreen):
             name: _ENEMY_CONSTRUCTORS.get(name, EnemyData)(**fields)
             for name, fields in raw.items()
         }
+
+    @staticmethod
+    def _load_item_configs() -> dict[str, dict]:
+        with open(DATA_DIR / "items.json", encoding="utf-8") as f:
+            return json.load(f)
+
+    def _spawn_items(self) -> list[Item]:
+        cfg = self._load_item_configs()
+        ts = TILE_SIZE
+        food = cfg["food"]
+        quest = cfg["quest"]
+        beans = food["canned_beans"]
+        ration = food["ration_pack"]
+        alpha = quest["vaccine_component_alpha"]
+        beta = quest["vaccine_component_beta"]
+        return [
+            # Комната 1: консервы рядом со стартом
+            FoodItem(15 * ts, 6 * ts, "canned_beans", beans["name"], beans["description"], beans["nutrition"]),
+            # Комната 2: паёк
+            FoodItem(37 * ts, 8 * ts, "ration_pack", ration["name"], ration["description"], ration["nutrition"]),
+            # Комната 3: первый компонент вакцины
+            QuestItem(14 * ts, 18 * ts, "vaccine_component_alpha", alpha["name"], alpha["description"]),
+            # Комната 4: второй компонент вакцины
+            QuestItem(39 * ts, 18 * ts, "vaccine_component_beta", beta["name"], beta["description"]),
+        ]

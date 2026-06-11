@@ -5,9 +5,11 @@ from typing import TYPE_CHECKING
 import pygame
 
 from core.entity import Entity
+from core.item import Item
 from data.player_data import PlayerData
 from systems.event_bus import EventBus
 from systems.hunger import HungerComponent
+from systems.inventory import Inventory
 
 if TYPE_CHECKING:
     from core.weapon import Weapon
@@ -30,15 +32,32 @@ class Player(Entity):
             config.max_hunger, config.hunger_decay_rate
         )
         self._weapon: Weapon | None = None
+        self._inventory: Inventory = Inventory()
 
     @property
     def rect(self) -> pygame.Rect:
         """Прямоугольник для коллизий и рендера."""
         return self._rect
 
+    @property
+    def inventory(self) -> Inventory:
+        """Инвентарь игрока."""
+        return self._inventory
+
     def equip(self, weapon: Weapon) -> None:
         """Экипировать оружие."""
         self._weapon = weapon
+
+    def pickup_item(self, item: Item) -> bool:
+        """Подобрать предмет с земли. Деактивирует item при успехе."""
+        added = self._inventory.add_item(item)
+        if added:
+            item.active = False
+        return added
+
+    def use_item(self, item: Item) -> bool:
+        """Использовать предмет из инвентаря. Делегирует Inventory."""
+        return self._inventory.use_item(item, self)
 
     def fire(self, direction: pygame.Vector2) -> list[Bullet]:
         """Выстрелить в direction. Делегирует оружию; возвращает [] без оружия или при кулдауне."""
