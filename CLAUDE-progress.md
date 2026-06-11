@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 7C — Skill Tree UI + ESC bugfix ✅  
+**Спринт:** 8A — Quest System Core ✅  
 **Дата последнего обновления:** 2026-06-11
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 7C завершён, ждём старта Спринта 8
+- [ ] Ничего — Спринт 8A завершён, ждём старта Спринта 8B
 
 ---
 
@@ -200,13 +200,20 @@
 - [x] `main.py` — `GameStateManager.depth: int` property + `if depth <= 1: _running = False`
 - [x] `tests/test_skill_tree_ui.py` — +11 регрессионных тестов (TestGameStateManagerDepth × 5, TestEscRoutingRegression × 6)
 
+### Тесты — 309 тестов, все зелёные ✅ (после Спринта 8A)
+
 ### Тесты — 262 теста, все зелёные ✅
 +11 регрессионных тестов:
 - TestGameStateManagerDepth: depth=0/1/2, уменьшение при pop, pop на пустом стеке
 - TestEscRoutingRegression: ESC закрывает оверлей и оставляет базовый экран; depth>1 = оверлей открыт; depth=1 = разрешён выход; TAB→ESC→возврат к базовому; повторное открытие после закрытия; on_close ровно 1 раз
 
-### Спринт 8 — Квесты + Нарратив
-- [ ] `systems/quest_system.py` — триггеры, цели, прогресс
+### Спринт 8A — Quest System Core ✅ (завершён)
+- [x] `data/quest_data.py` — `QuestStatus(Enum)`, `Objective(ABC)`, `KillZombieObjective`, `Quest @dataclass`
+- [x] `systems/quest_system.py` — `QuestSystem`: `accept_quest`, `update_progress`, `complete_quest`, EventBus-подписка на `entity_died`, эмит `quest_completed`
+- [x] `tests/test_quest_system.py` — 47 тестов: все требования Sprint 8A покрыты
+- [x] Вертикальный цикл: принять квест → убить зомби → завершить → XP → level up
+
+### Спринт 8B — Квесты + Нарратив (следующий)
 - [ ] `assets/data/quests.json` — данные квестов
 - [ ] `systems/lore.py` — записки и терминалы
 - [ ] `systems/dialogue.py` — диалоги
@@ -265,6 +272,10 @@
 | 2026-06-11 | Lazy import `from ui.skill_tree_ui import SkillTreeUI` внутри метода в GameScreen | GameScreen не импортирует SkillTreeUI на уровне модуля; Tab-нажатие — редкое событие; исключает circular import |
 | 2026-06-11 | `state_manager: Any = None` в GameScreen.__init__ | default None сохраняет обратную совместимость; Any исключает зависимость GameScreen→main |
 | 2026-06-11 | `GameStateManager.depth <= 1` как условие выхода по ESC | depth>1 означает открытый оверлей (SkillTreeUI и любой будущий); при depth=1 ESC завершает игру как раньше |
+| 2026-06-11 | `Objective.on_kill(faction: str)` с default no-op в базовом классе | QuestSystem вызывает `obj.on_kill(faction)` полиморфно для всех целей без isinstance; будущие цели (не про убийства) наследуют no-op |
+| 2026-06-11 | `QuestSystem` подписывается на `entity_died`, не на гипотетический `zombie_killed` | `entity_died` — существующее событие; faction=="enemy" отфильтровывает не-зомби; нет необходимости в новом событии |
+| 2026-06-11 | `QuestSystem._try_complete` пропускает квест без целей | квест с пустым `objectives` не завершается автоматически; требует `complete_quest()` — предотвращает мгновенное завершение незаполненных квестов |
+| 2026-06-11 | `update_progress(event_data: dict)` публичный — `_on_entity_died` делегирует ему | публичный метод позволяет тестировать прогресс без EventBus; EventBus-подписка остаётся внутренней деталью |
 
 ---
 
@@ -305,6 +316,13 @@
 > `weapon.damage_bonus` — накопленный бонус к урону от навыков. `Pistol.fire()` создаёт пулю с `config.damage + _damage_bonus`.
 > `SkillTreeUI(player, on_close)` — `on_close: Callable[[], None]`; в GameScreen передаётся `state_manager.pop`. Tab открывает, ESC закрывает.
 > `ui/skill_tree_ui.py` — `_SKILLS = list(SkillType)` — порядок навигации совпадает с порядком enum. `selected_skill` — публичный property для тестов.
+> `QuestSystem(exp_component)` — принимает `ExperienceComponent`; автоматически подписывается на `entity_died`. XP выдаётся через `exp_component.add_xp(quest.reward_xp)`.
+> `quest_system.accept_quest(quest)` — переводит `AVAILABLE → ACTIVE`. Повторный вызов / вызов для завершённого квеста — нет-оп.
+> `quest_system.update_progress(event_data)` — принимает dict с ключом `"entity"`; вызывает `obj.on_kill(faction)` на всех целях; полиморфно, без isinstance.
+> `quest_system.complete_quest(quest)` — принудительное завершение активного квеста; нет-оп если квест не в active.
+> EventBus-события квестов: входящее `entity_died`, исходящее `quest_completed` (data: `{"quest": quest}`).
+> Квест с пустым `objectives` не завершается через `update_progress` — только через `complete_quest()`.
+> `KillZombieObjective.on_kill("enemy")` не превышает `target_count` — guard `not self.is_complete` внутри метода.
 
 ---
 
