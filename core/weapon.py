@@ -17,11 +17,21 @@ class Weapon(ABC):
     def __init__(self, config: WeaponConfig) -> None:
         self._config: WeaponConfig = config
         self._cooldown: float = 0.0
+        self._damage_bonus: float = 0.0
 
     @property
     def can_fire(self) -> bool:
         """Готово ли оружие к выстрелу (кулдаун истёк)."""
         return self._cooldown <= 0.0
+
+    @property
+    def damage_bonus(self) -> float:
+        """Дополнительный урон от навыков."""
+        return self._damage_bonus
+
+    def add_damage_bonus(self, amount: float) -> None:
+        """Добавить бонус к урону (вызывается при прокачке PISTOL_DAMAGE)."""
+        self._damage_bonus += amount
 
     def update(self, dt: float) -> None:
         """Уменьшить кулдаун на dt секунд."""

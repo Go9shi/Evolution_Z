@@ -33,6 +33,11 @@ class HealthComponent:
         """Восстановить HP на amount, не превышая максимум."""
         self._current = min(self._maximum, self._current + amount)
 
+    def increase_maximum(self, amount: float) -> None:
+        """Увеличить максимум и текущее HP на одинаковую величину (ограничено новым максимумом)."""
+        self._maximum += amount
+        self._current = min(self._current + amount, self._maximum)
+
     def reset(self) -> None:
         """Полностью восстановить HP до максимума."""
         self._current = self._maximum

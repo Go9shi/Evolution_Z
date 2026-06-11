@@ -16,7 +16,7 @@ class Pistol(Weapon):
             pos.x,
             pos.y,
             velocity,
-            self._config.damage,
+            self._config.damage + self._damage_bonus,
             self._config.bullet_range,
             self._config.bullet_size,
             origin_tag="player",

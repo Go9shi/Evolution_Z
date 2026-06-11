@@ -34,6 +34,10 @@ class HungerComponent:
         """Восстановить сытость (еда). Не превышает максимум."""
         self._current = min(self._maximum, self._current + amount)
 
+    def reduce_decay_rate(self, amount: float) -> None:
+        """Уменьшить скорость убывания сытости. Не ниже нуля."""
+        self._decay_rate = max(0.0, self._decay_rate - amount)
+
     def reset(self) -> None:
         """Восстановить сытость до максимума."""
         self._current = self._maximum

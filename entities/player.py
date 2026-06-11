@@ -11,6 +11,7 @@ from systems.event_bus import EventBus
 from systems.experience import ExperienceComponent
 from systems.hunger import HungerComponent
 from systems.inventory import Inventory
+from systems.skill_tree import SkillTree
 
 if TYPE_CHECKING:
     from core.weapon import Weapon
@@ -35,6 +36,8 @@ class Player(Entity):
         self._weapon: Weapon | None = None
         self._inventory: Inventory = Inventory()
         self._experience: ExperienceComponent = ExperienceComponent()
+        self._skill_tree: SkillTree = SkillTree()
+        EventBus.on("player_level_up", self._on_level_up)
 
     @property
     def rect(self) -> pygame.Rect:
@@ -47,6 +50,11 @@ class Player(Entity):
         return self._inventory
 
     @property
+    def skill_tree(self) -> SkillTree:
+        """Дерево навыков игрока."""
+        return self._skill_tree
+
+    @property
     def experience(self) -> ExperienceComponent:
         """Компонент опыта и уровней игрока."""
         return self._experience
@@ -54,6 +62,11 @@ class Player(Entity):
     def add_xp(self, amount: int) -> bool:
         """Добавить XP. Делегирует ExperienceComponent; возвращает True при level-up."""
         return self._experience.add_xp(amount)
+
+    def apply_weapon_damage_bonus(self, bonus: float) -> None:
+        """Передать бонус к урону текущему оружию (если оно экипировано)."""
+        if self._weapon is not None:
+            self._weapon.add_damage_bonus(bonus)
 
     def equip(self, weapon: Weapon) -> None:
         """Экипировать оружие."""
@@ -109,6 +122,10 @@ class Player(Entity):
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
         pygame.draw.rect(surface, self.COLOR, draw_rect)
         pygame.draw.rect(surface, (255, 255, 255), draw_rect, 2)
+
+    def _on_level_up(self, _data: dict) -> None:
+        """Начислить одно очко навыка при каждом повышении уровня."""
+        self._skill_tree.add_point()
 
     def _resolve_x(self, walls: list[pygame.Rect]) -> None:
         for wall in walls:

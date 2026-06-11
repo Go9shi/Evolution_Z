@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 6 — Inventory + Items ✅  
+**Спринт:** 7B — Skill Tree Core ✅  
 **Дата последнего обновления:** 2026-06-11
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 6 завершён, ждём старта Спринта 7
+- [ ] Ничего — Спринт 7B завершён, ждём старта Спринта 8
 
 ---
 
@@ -165,9 +165,26 @@
 - [x] `tests/test_inventory.py` — 30 тестов
 - [x] Запускаемый прототип: игрок ходит над предметом → автоподбор; F → еда восстанавливает голод; квест-предметы сохраняются
 
-### Спринт 7 — Прогрессия
-- [ ] XP и уровни в `Player`
-- [ ] `systems/skill_tree.py` — три ветки навыков
+### Спринт 7A — XP + Уровни ✅ (завершён)
+- [x] `systems/experience.py` — `ExperienceComponent`: `current_xp`, `current_level`, `xp_to_next_level`, `add_xp()` → level-up loop + EventBus
+- [x] `entities/player.py` — `_experience`, `experience` property, `add_xp()` делегирование
+- [x] `ui/game_screen.py` — `_on_entity_died` → `player.add_xp(xp_reward)` при гибели врага
+- [x] `tests/test_experience.py` — 26 тестов
+
+### Тесты — 188 тестов, все зелёные ✅ (до Спринта 7B)
+
+### Спринт 7B — Skill Tree Core ✅ (завершён)
+- [x] `systems/health.py` — +`increase_maximum(amount)`: увеличивает maximum и current (bounded)
+- [x] `systems/hunger.py` — +`reduce_decay_rate(amount)`: уменьшает скорость голода, не ниже 0
+- [x] `core/weapon.py` — +`_damage_bonus`, `damage_bonus` property, `add_damage_bonus(amount)`
+- [x] `entities/weapons/pistol.py` — bullet damage = `config.damage + _damage_bonus`
+- [x] `systems/skill_tree.py` — `SkillType(Enum)`: MAX_HEALTH / HUNGER_EFFICIENCY / PISTOL_DAMAGE; `SkillTree`: `available_points`, `get_level`, `add_point`, `can_upgrade`, `upgrade(skill, player)`
+- [x] `entities/player.py` — `_skill_tree`, `skill_tree` property, `apply_weapon_damage_bonus()`, подписка `player_level_up` → `_on_level_up` → `add_point()`
+- [x] `tests/test_skill_tree.py` — 36 тестов
+
+### Тесты — 224 теста, все зелёные ✅
+
+### Спринт 7 (остаток) — UI дерева навыков
 - [ ] `ui/skill_tree_ui.py` — визуальное дерево
 - [x] `systems/hunger.py` — ✅ сделано досрочно (Спринт 3.5)
 
@@ -223,6 +240,10 @@
 | 2026-06-11 | `Inventory.use_item(item, player)` с player как параметр | Inventory не хранит ref на Player; Player передаёт self → нет хранимой зависимости; TYPE_CHECKING устраняет circular import |
 | 2026-06-11 | Подбор предметов через `colliderect` в GameScreen, автоматически | нет отдельной клавиши подбора; ходить над предметом = подобрать; F — использовать первый доступный предмет (полиморфизм: quest пропускается, food применяется) |
 | 2026-06-11 | `entities/items/` субпакет для FoodItem и QuestItem | следует паттерну `entities/weapons/`; отдельная папка для подтипов одной категории |
+| 2026-06-11 | `player_level_up` EventBus → `_on_level_up` → `add_point()` | ExperienceComponent эмитит событие для каждого level-up в while-цикле; подписка корректно начисляет N очков при N level-up за один вызов add_xp |
+| 2026-06-11 | `_damage_bonus: float` в Weapon + `Pistol.fire()` суммирует `config.damage + _damage_bonus` | SkillTree не зависит от Pistol; Player.apply_weapon_damage_bonus() делегирует weapon; weapon хранит накопленный бонус |
+| 2026-06-11 | Публичные константы `HP_PER_LEVEL`, `DAMAGE_PER_LEVEL` и др. в `skill_tree.py` | доступны из тестов без дублирования магических чисел; аналогично `settings.py` паттерну |
+| 2026-06-11 | `_apply_effect` if/elif на `SkillType` enum (не isinstance) | SkillType конечен и контролируем; dispatch dict создал бы circular import на уровне модуля |
 
 ---
 
@@ -258,6 +279,9 @@
 > `QuestItem.use(player)` — возвращает False, из инвентаря не удаляется.
 > EventBus-события инвентаря: `inventory_item_added`, `inventory_item_removed`, `item_used`.
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
+> `player.skill_tree` — `SkillTree`. `skill_tree.add_point()` вызывается через EventBus `player_level_up` (по одному разу на каждый level-up). `skill_tree.upgrade(SkillType.X, player)` — тратит 1 очко, применяет эффект. Константы: `HP_PER_LEVEL=20`, `HUNGER_REDUCTION_PER_LEVEL=0.5`, `DAMAGE_PER_LEVEL=5.0`, `MAX_SKILL_LEVEL=5`.
+> `player.apply_weapon_damage_bonus(bonus)` — передаёт бонус в `_weapon.add_damage_bonus()`; no-op если оружие не экипировано.
+> `weapon.damage_bonus` — накопленный бонус к урону от навыков. `Pistol.fire()` создаёт пулю с `config.damage + _damage_bonus`.
 
 ---
 
