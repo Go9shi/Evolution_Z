@@ -4,6 +4,9 @@
       "id": "clear_bunker_a1",
       "title": "Clear Bunker A1",
       "description": "Eliminate the infected roaming the bunker.",
+      "lore_text": "Emergency transmission from Bunker A1: the quarantine has failed. Whatever is left down here is no longer human. Clear a path before the seals give out.",
+      "location": "Bunker A1",
+      "category": "main_story",
       "reward_xp": 100,
       "objectives": [
         {

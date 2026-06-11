@@ -53,7 +53,11 @@ class KillZombieObjective(Objective):
 
 @dataclass
 class Quest:
-    """Квест с набором целей и XP-наградой за выполнение."""
+    """Квест с набором целей и XP-наградой за выполнение.
+
+    Narrative-метаданные (lore_text, location, category) — опциональны и не влияют
+    на игровую логику; QuestSystem их не использует. Служат только для отображения.
+    """
 
     id: str
     title: str
@@ -61,3 +65,6 @@ class Quest:
     reward_xp: int
     objectives: list[Objective] = field(default_factory=list)
     status: QuestStatus = QuestStatus.AVAILABLE
+    lore_text: str = ""
+    location: str = ""
+    category: str = ""

@@ -229,6 +229,100 @@ class TestMissingFields:
             load_quests(write_json(tmp_path, {"quests": ["not an object"]}))
 
 
+# ── Sprint 8D: narrative metadata ───────────────────────────────────────────────
+
+
+_NARRATIVE_PAYLOAD = {
+    "quests": [
+        {
+            "id": "clear_bunker_a1",
+            "title": "Clear Bunker A1",
+            "description": "Eliminate infected units.",
+            "lore_text": "Emergency transmission from Bunker A1...",
+            "location": "Bunker A1",
+            "category": "main_story",
+            "reward_xp": 100,
+            "objectives": [{"type": "kill_zombie", "target_count": 4}],
+        }
+    ]
+}
+
+
+class TestNarrativeMetadataLoaded:
+    """Новые narrative-поля загружаются из JSON в модель Quest."""
+
+    def test_lore_text_loaded(self, tmp_path: Path) -> None:
+        quest = load_quests(write_json(tmp_path, _NARRATIVE_PAYLOAD))[0]
+        assert quest.lore_text == "Emergency transmission from Bunker A1..."
+
+    def test_location_loaded(self, tmp_path: Path) -> None:
+        quest = load_quests(write_json(tmp_path, _NARRATIVE_PAYLOAD))[0]
+        assert quest.location == "Bunker A1"
+
+    def test_category_loaded(self, tmp_path: Path) -> None:
+        quest = load_quests(write_json(tmp_path, _NARRATIVE_PAYLOAD))[0]
+        assert quest.category == "main_story"
+
+    def test_core_fields_still_loaded_alongside_metadata(self, tmp_path: Path) -> None:
+        quest = load_quests(write_json(tmp_path, _NARRATIVE_PAYLOAD))[0]
+        assert quest.id == "clear_bunker_a1"
+        assert quest.reward_xp == 100
+        assert quest.objectives[0].is_complete is False
+
+
+class TestNarrativeMetadataOptional:
+    """Отсутствие narrative-полей не ломает загрузку — поля получают пустые значения."""
+
+    def test_missing_metadata_loads_successfully(self, tmp_path: Path) -> None:
+        # _VALID_PAYLOAD не содержит lore_text/location/category
+        quests = load_quests(write_json(tmp_path, _VALID_PAYLOAD))
+        assert len(quests) == 1
+
+    def test_missing_lore_text_defaults_empty(self, tmp_path: Path) -> None:
+        quest = load_quests(write_json(tmp_path, _VALID_PAYLOAD))[0]
+        assert quest.lore_text == ""
+
+    def test_missing_location_defaults_empty(self, tmp_path: Path) -> None:
+        quest = load_quests(write_json(tmp_path, _VALID_PAYLOAD))[0]
+        assert quest.location == ""
+
+    def test_missing_category_defaults_empty(self, tmp_path: Path) -> None:
+        quest = load_quests(write_json(tmp_path, _VALID_PAYLOAD))[0]
+        assert quest.category == ""
+
+    def test_partial_metadata_loads(self, tmp_path: Path) -> None:
+        payload = {
+            "quests": [{
+                "id": "q", "title": "T", "description": "D", "reward_xp": 10,
+                "location": "Bunker B3",
+                "objectives": [{"type": "kill_zombie", "target_count": 1}],
+            }]
+        }
+        quest = load_quests(write_json(tmp_path, payload))[0]
+        assert quest.location == "Bunker B3"
+        assert quest.lore_text == ""
+        assert quest.category == ""
+
+    def test_metadata_not_required_field(self, tmp_path: Path) -> None:
+        # narrative-поля не входят в обязательные: квест без них валиден
+        for field in ("lore_text", "location", "category"):
+            assert field not in _VALID_PAYLOAD["quests"][0]
+
+
+class TestBackwardCompatibility:
+    """Старые квесты (формат до 8D) продолжают загружаться и работать в цикле."""
+
+    def test_old_quest_completes_and_grants_xp(self, tmp_path: Path) -> None:
+        exp = ExperienceComponent()
+        qs = QuestSystem(exp)
+        quest = load_quests(write_json(tmp_path, _VALID_PAYLOAD))[0]
+        qs.accept_quest(quest)
+        for _ in range(4):
+            EventBus.emit("entity_died", {"entity": FakeEntity("enemy")})
+        assert quest.status == QuestStatus.COMPLETED
+        assert exp.current_xp == 100
+
+
 # ── integration: real game JSON loads and works ────────────────────────────────
 
 
@@ -247,6 +341,12 @@ class TestRealQuestFileIntegration:
         obj = starter.objectives[0]
         assert isinstance(obj, KillZombieObjective)
         assert obj.target_count == 4
+
+    def test_real_starter_quest_has_narrative_metadata(self) -> None:
+        starter = load_quests(DATA_DIR / "quests.json")[0]
+        assert starter.location == "Bunker A1"
+        assert starter.category == "main_story"
+        assert starter.lore_text != ""
 
     def test_loaded_quest_completes_and_grants_xp(self) -> None:
         exp = ExperienceComponent()

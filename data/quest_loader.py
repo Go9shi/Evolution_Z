@@ -70,6 +70,9 @@ def _build_quest(raw: Any) -> Quest:
         description=raw["description"],
         reward_xp=raw["reward_xp"],
         objectives=objectives,
+        lore_text=raw.get("lore_text", ""),
+        location=raw.get("location", ""),
+        category=raw.get("category", ""),
     )
 
 

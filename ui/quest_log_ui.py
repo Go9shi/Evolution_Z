@@ -17,6 +17,7 @@ _COL_SELECTED = (100, 255, 150)
 _COL_NORMAL = (180, 180, 180)
 _COL_DESC = (140, 140, 150)
 _COL_PROGRESS = (120, 200, 255)
+_COL_META = (150, 170, 140)
 _COL_HINT = (110, 110, 110)
 
 
@@ -94,6 +95,12 @@ class QuestLogUI(BaseScreen):
             surface.blit(desc, (left_x, y))
             y += 26
 
+            meta = self._format_meta(quest)
+            if meta:
+                meta_surf = self._font_hint.render(f"      {meta}", True, _COL_META)
+                surface.blit(meta_surf, (left_x, y))
+                y += 24
+
             for objective in quest.objectives:
                 line = self._font_hint.render(
                     f"      Progress: {objective.progress}", True, _COL_PROGRESS
@@ -101,6 +108,21 @@ class QuestLogUI(BaseScreen):
                 surface.blit(line, (left_x, y))
                 y += 24
             y += 16
+
+    @staticmethod
+    def _format_meta(quest: object) -> str:
+        """Собрать строку 'category @ location' из непустых narrative-полей квеста.
+
+        Старые квесты без этих полей дают пустую строку — строка не отрисовывается.
+        """
+        category = getattr(quest, "category", "")
+        location = getattr(quest, "location", "")
+        parts: list[str] = []
+        if category:
+            parts.append(f"[{category}]")
+        if location:
+            parts.append(f"@ {location}")
+        return " ".join(parts)
 
     def _move_selection(self, delta: int) -> None:
         count = len(self._quest_system.active_quests)

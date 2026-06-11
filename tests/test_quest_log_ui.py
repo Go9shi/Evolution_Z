@@ -238,6 +238,56 @@ class TestProgressReflectsLiveData:
         ui.draw(surface())  # должен корректно показать пустой список
 
 
+# ── Sprint 8D: narrative metadata display ───────────────────────────────────────
+
+
+def make_narrative_quest(
+    quest_id: str = "q",
+    location: str = "Bunker A1",
+    category: str = "main_story",
+    lore_text: str = "Emergency transmission...",
+) -> Quest:
+    return Quest(
+        id=quest_id,
+        title="Clear Bunker A1",
+        description="Eliminate infected units.",
+        reward_xp=100,
+        objectives=[KillZombieObjective(target_count=4)],
+        lore_text=lore_text,
+        location=location,
+        category=category,
+    )
+
+
+class TestNarrativeMetadataDisplay:
+    def test_format_meta_combines_category_and_location(self) -> None:
+        quest = make_narrative_quest()
+        assert QuestLogUI._format_meta(quest) == "[main_story] @ Bunker A1"
+
+    def test_format_meta_only_location(self) -> None:
+        quest = make_narrative_quest(category="")
+        assert QuestLogUI._format_meta(quest) == "@ Bunker A1"
+
+    def test_format_meta_only_category(self) -> None:
+        quest = make_narrative_quest(location="")
+        assert QuestLogUI._format_meta(quest) == "[main_story]"
+
+    def test_format_meta_empty_when_no_metadata(self) -> None:
+        # старый квест без narrative-полей → пустая строка → строка не рисуется
+        quest = make_quest()
+        assert QuestLogUI._format_meta(quest) == ""
+
+    def test_draw_quest_with_metadata_does_not_raise(self) -> None:
+        system = make_system()
+        system.accept_quest(make_narrative_quest())
+        make_ui(system).draw(surface())
+
+    def test_draw_quest_without_metadata_does_not_raise(self) -> None:
+        system = make_system()
+        system.accept_quest(make_quest())
+        make_ui(system).draw(surface())
+
+
 # ── TestReadOnly ───────────────────────────────────────────────────────────────
 
 
