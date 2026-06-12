@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 8E — Нарратив: системы (в работе) · DialogueSystem ✅  
+**Спринт:** 8E — Нарратив: системы (в работе) · DialogueSystem ✅ · DialogueLoader ✅  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ сделана. Осталось: `systems/lore.py` (записки/терминалы), сюжетные события глав 1–3, интеграция диалогов в GameScreen/UI.
+- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ сделаны. Осталось: `systems/lore.py` (записки/терминалы), сюжетные события глав 1–3, интеграция диалогов в GameScreen/UI.
 
 ---
 
@@ -247,9 +247,19 @@
 - [x] `data/dialogue_data.py` — `@dataclass DialogueChoice` (text, next_id), `DialogueNode` (id, speaker, text, choices, `is_terminal`), `Dialogue` (id, nodes, start_id)
 - [x] `systems/dialogue.py` — `DialogueError` + `DialogueSystem`: `start`, `is_active`, `current_node`, `advance` (линейный), `choose(index)` (ветвление), `end`; EventBus-события `dialogue_started` / `dialogue_node_changed` / `dialogue_ended`; без isinstance (ветвление по `len(choices)`)
 - [x] `tests/test_dialogue.py` — 32 теста (данные, старт+валидация, advance, choose, end, EventBus, интеграция)
+- [x] `assets/data/dialogues.json` — данные диалогов (`{"dialogues": [{id, start_id, nodes: [{id, speaker, text, choices: [{text, next_id}]}]}]}`); пример `ranger_intro`
+- [x] `data/dialogue_loader.py` — `load_dialogues(path) → list[Dialogue]` + `DialogueLoadError`; валидация структуры, обязательных полей узлов/диалога, дубликатов id, целостности ссылок (start_id + непустые next_id)
+- [x] `tests/test_dialogue_loader.py` — 25 тестов
 - [ ] `systems/lore.py` — записки и терминалы
 - [ ] Сюжетные события глав 1–3
 - [ ] Интеграция диалогов в GameScreen/UI (отдельная под-задача, как loader 8C / UI 8B)
+
+### Тесты — 444 теста, все зелёные ✅ (после DialogueLoader в 8E.1)
++25 тестов в `tests/test_dialogue_loader.py`:
+- Успешная загрузка: поля Dialogue, nodes как map, choices, терминальный узел, дефолт next_id, прогон загруженного диалога в DialogueSystem
+- Несколько диалогов; пустой список `dialogues` → []
+- Ошибки: нет файла, битый JSON, не-объект, нет ключа `dialogues`, `dialogues` не список, нет поля диалога/узла, `nodes`/`choices` не список, choice без `text`, висячий start_id, висячая ссылка в choice, дубли id узлов, пустой диалог (нет узлов)
+- Реальный `assets/data/dialogues.json`: грузится, start_id валиден, проходится до конца
 
 ### Тесты — 419 тестов, все зелёные ✅ (после DialogueSystem в 8E)
 +32 теста в `tests/test_dialogue.py`:
@@ -332,6 +342,10 @@
 | 2026-06-12 | `advance()` (0–1 выбор) vs `choose(index)` (ветвление); ветвление по `len(choices)`, не isinstance | isinstance запрещён CLAUDE.md; `advance()` при >1 выборе поднимает DialogueError — caller обязан вызвать `choose()` |
 | 2026-06-12 | `DialogueSystem` сообщает о состоянии только через EventBus (`dialogue_started/node_changed/ended`) | UI и прочие системы подписываются; нет прямых импортов UI в системе — как QuestSystem эмитит `quest_completed` |
 | 2026-06-12 | JSON-загрузчик диалогов и UI вынесены из задачи | повторяет инкремент quest: 8B (UI) и 8C (loader) делались отдельно; данная задача — только рантайм-система + слой данных |
+| 2026-06-12 | `data/dialogue_loader.py` — `load_dialogues(path) → list[Dialogue]` + `DialogueLoadError` | прямая копия паттерна `quest_loader`: чистое преобразование JSON→объекты, зависит только от `dialogue_data` (+json/pathlib), не зависит от DialogueSystem/UI |
+| 2026-06-12 | `nodes` в JSON — список объектов с `id`; loader строит `dict[str, DialogueNode]` | формат удобен для редактирования; loader превращает в map (как ожидает `Dialogue`); дубли id отлавливаются сравнением длины |
+| 2026-06-12 | Loader проверяет целостность ссылок (start_id + непустые next_id → существующий узел) | висячие ссылки ловятся на загрузке, а не в рантайме DialogueSystem; пустой next_id (`""`) пропускается — это легитимный конец диалога |
+| 2026-06-12 | `choices`/`next_id` опциональны в JSON (`.get` с дефолтом) | терминальный узел = без `choices`; реплика-конец = `next_id` опущен → `""`; data-driven без хардкода |
 
 ---
 
@@ -390,7 +404,10 @@
 > `DialogueSystem` — рантайм диалогов. `start(dialogue)` активирует; `current_node` / `is_active` — состояние; `advance()` — линейный шаг (0 выборов→конец, 1→переход, >1→DialogueError); `choose(index)` — ветвление; `end()` — завершить (нет-оп если не активен).
 > Модель диалога: `Dialogue(id, nodes: dict[str, DialogueNode], start_id)`. `DialogueNode(id, speaker, text, choices)`, `is_terminal` = нет choices. `DialogueChoice(text, next_id)`, `next_id == ""` → конец диалога.
 > EventBus-события диалога: `dialogue_started` ({dialogue}), `dialogue_node_changed` ({node}), `dialogue_ended` ({dialogue}). UI подписывается на них — прямых вызовов из системы в UI нет.
-> Диалоги НЕ интегрированы в GameScreen/UI и НЕ грузятся из JSON — это отдельные под-задачи Спринта 8E (как loader 8C / UI 8B у квестов).
+> Диалоги НЕ интегрированы в GameScreen/UI — это отдельная под-задача Спринта 8E (как UI 8B у квестов).
+> `data/dialogue_loader.py` — `load_dialogues(path: Path) → list[Dialogue]`. Поднимает `DialogueLoadError` при любой ошибке (нет файла / битый JSON / нет обязательных полей / дубли id узлов / висячие ссылки / пустой диалог без узлов).
+> Формат `dialogues.json`: `{"dialogues": [{id, start_id, nodes: [{id, speaker, text, choices: [{text, next_id}]}]}]}`. `choices` и `next_id` опциональны; `next_id == ""` (или опущен) = конец диалога; узел без `choices` = терминальный.
+> Loader строит `nodes` (список в JSON) в `dict[str, DialogueNode]` и валидирует целостность ссылок: start_id и все непустые next_id должны указывать на существующий узел.
 
 ---
 

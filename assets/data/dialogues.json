@@ -1,0 +1,32 @@
+{
+  "dialogues": [
+    {
+      "id": "ranger_intro",
+      "start_id": "greet",
+      "nodes": [
+        {
+          "id": "greet",
+          "speaker": "Ranger",
+          "text": "Stop right there. Are you infected?",
+          "choices": [
+            { "text": "No. I'm a survivor.", "next_id": "survivor" },
+            { "text": "...", "next_id": "silent" }
+          ]
+        },
+        {
+          "id": "survivor",
+          "speaker": "Ranger",
+          "text": "Good. Take this vaccine component and get to the lab.",
+          "choices": [
+            { "text": "Thank you.", "next_id": "" }
+          ]
+        },
+        {
+          "id": "silent",
+          "speaker": "Ranger",
+          "text": "Suit yourself. Don't get in my way."
+        }
+      ]
+    }
+  ]
+}
