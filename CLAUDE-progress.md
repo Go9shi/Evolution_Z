@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 8E — Нарратив: системы (в работе) · DialogueSystem ✅ · DialogueLoader ✅  
+**Спринт:** 8F — Dialogue Integration ✅ (DialogueSystem ✅ · Loader ✅ · UI ✅ · интеграция в GameScreen ✅)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ сделаны. Осталось: `systems/lore.py` (записки/терминалы), сюжетные события глав 1–3, интеграция диалогов в GameScreen/UI.
+- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ + DialogueUI ✅ + интеграция в GameScreen ✅ (8F) сделаны. Осталось: `systems/lore.py` (записки/терминалы), сюжетные события глав 1–3.
 
 ---
 
@@ -250,9 +250,34 @@
 - [x] `assets/data/dialogues.json` — данные диалогов (`{"dialogues": [{id, start_id, nodes: [{id, speaker, text, choices: [{text, next_id}]}]}]}`); пример `ranger_intro`
 - [x] `data/dialogue_loader.py` — `load_dialogues(path) → list[Dialogue]` + `DialogueLoadError`; валидация структуры, обязательных полей узлов/диалога, дубликатов id, целостности ссылок (start_id + непустые next_id)
 - [x] `tests/test_dialogue_loader.py` — 25 тестов
+- [x] `ui/dialogue_ui.py` — `DialogueUI(BaseScreen)`: ref на DialogueSystem + `on_close: Callable`; UP/DOWN — навигация по choices (циклическая), ENTER — `choose(index)` (не-терминал) / `advance()` (терминал → завершает диалог), ESC — `on_close()`; состояние не дублирует, читает `current_node`
+- [x] `tests/test_dialogue_ui.py` — 25 тестов
 - [ ] `systems/lore.py` — записки и терминалы
 - [ ] Сюжетные события глав 1–3
-- [ ] Интеграция диалогов в GameScreen/UI (отдельная под-задача, как loader 8C / UI 8B)
+
+### Спринт 8F — Dialogue Integration ✅ (завершён)
+- [x] `ui/game_screen.py` — `_load_dialogues()` (читает `DATA_DIR/dialogues.json`); `self._dialogues: dict[str, Dialogue]`; `self._dialogue_system = DialogueSystem()` (владелец состояния); read-only property `dialogue_system`
+- [x] `ui/game_screen.py` — клавиша `T` → `_start_dialogue("ranger_intro")`: lazy import `DialogueUI`, `dialogue_system.start(dialogue)`, `state_manager.push(DialogueUI(..., state_manager.pop))`; нет-оп при `state_manager is None` и неизвестном id
+- [x] `ui/game_screen.py` — подписка на EventBus `dialogue_ended` → `_on_dialogue_ended`: снимает оверлей (`pop`), только если сверху `DialogueUI` — авто-возврат в игру по завершении диалога
+- [x] `tests/test_dialogue_integration.py` — 14 тестов
+- [x] Smoke (headless): GameScreen → T → DialogueUI → выбор → терминал → ENTER → авто-возврат в GameScreen → игра продолжается
+
+### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
++14 тестов в `tests/test_dialogue_integration.py`:
+- Загрузка: диалоги доступны GameScreen, корректный стартовый узел
+- Открытие: T → DialogueUI, push ровно одного экрана, диалог активен, UI использует тот же экземпляр DialogueSystem
+- Закрытие: завершение диалога → возврат в GameScreen; ESC закрывает оверлей и возвращает в игру; ESC не завершает состояние диалога
+- Поведение: повторное открытие перезапускает диалог; неизвестный id безопасен; `state_manager is None` безопасен; неактивный диалог не ломает update/draw
+- Интеграция: полный сценарий T → выбор → терминал → завершение → возврат
+
+### Тесты — 469 тестов, все зелёные ✅ (после DialogueUI в 8E.2)
++25 тестов в `tests/test_dialogue_ui.py`:
+- Инициализация: наследование BaseScreen, начальный индекс, неактивная система (пустой диалог)
+- Навигация: UP/DOWN, циклическая, один вариант, терминальный узел (индекс 0), неактивная система, игнор не-KEYDOWN
+- Выбор: ENTER → choose первого/второго варианта, сброс индекса после перехода, ENTER на терминале → завершение, безопасность на неактивной системе
+- Закрытие: ESC → on_close ровно один раз; ESC не завершает диалог (владелец — DialogueSystem)
+- Отрисовка: draw без падения, терминальный узел, неактивная система, пустые тексты вариантов, update
+- Интеграция: полный проход start → выбор → терминал → завершение; линейный диалог с одним вариантом
 
 ### Тесты — 444 теста, все зелёные ✅ (после DialogueLoader в 8E.1)
 +25 тестов в `tests/test_dialogue_loader.py`:
@@ -346,6 +371,14 @@
 | 2026-06-12 | `nodes` в JSON — список объектов с `id`; loader строит `dict[str, DialogueNode]` | формат удобен для редактирования; loader превращает в map (как ожидает `Dialogue`); дубли id отлавливаются сравнением длины |
 | 2026-06-12 | Loader проверяет целостность ссылок (start_id + непустые next_id → существующий узел) | висячие ссылки ловятся на загрузке, а не в рантайме DialogueSystem; пустой next_id (`""`) пропускается — это легитимный конец диалога |
 | 2026-06-12 | `choices`/`next_id` опциональны в JSON (`.get` с дефолтом) | терминальный узел = без `choices`; реплика-конец = `next_id` опущен → `""`; data-driven без хардкода |
+| 2026-06-12 | `DialogueUI(dialogue_system, on_close)` держит ref на DialogueSystem, читает `current_node` | повторяет `QuestLogUI(quest_system, on_close)` / `SkillTreeUI(player, on_close)`: UI не дублирует состояние, владелец — система; lazy TYPE_CHECKING-импорт DialogueSystem без circular import |
+| 2026-06-12 | ENTER на терминальном узле → `dialogue_system.advance()` (не `end()`) | `advance()` при 0 choices сам вызывает `end()` — используется существующий публичный API, новые методы в DialogueSystem не добавлялись |
+| 2026-06-12 | ESC → только `on_close()`, диалог НЕ завершается | строго как QuestLogUI/SkillTreeUI: ESC закрывает оверлей; завершение диалога — решение владельца (DialogueSystem), не UI; не добавляем поведение сверх требований |
+| 2026-06-12 | `_selected_index` сбрасывается в 0 после `choose`; навигация и выбор клампятся по `len(current_node.choices)` | число вариантов меняется между узлами; индекс всегда валиден для `choose()`; терминальный/неактивный узел → индекс 0, без падений |
+| 2026-06-12 | GameScreen владеет одним `DialogueSystem` + `dict[str, Dialogue]`; клавиша `T` → `_start_dialogue("ranger_intro")` | повторяет Tab→SkillTreeUI / J→QuestLogUI: lazy import UI, push с `on_close=state_manager.pop`; данные грузятся статиком `_load_dialogues` как `_load_quests` |
+| 2026-06-12 | Завершение диалога закрывает оверлей через EventBus `dialogue_ended` → `GameScreen._on_dialogue_ended` → `pop` | DialogueUI остаётся чистым экраном (8E.2: end() не дёргает on_close); закрытие — задача интеграции; реакция на событие повторяет `entity_died`→`_on_entity_died`; isinstance здесь — guard стека, не полиморфный dispatch |
+| 2026-06-12 | `_start_dialogue` — нет-оп при `state_manager is None` и неизвестном id (`dict.get` → None) | отсутствующий диалог и отсутствие менеджера не ломают игру; safe-by-default, без исключений в игровом цикле |
+| 2026-06-12 | read-only property `GameScreen.dialogue_system` | минимальный доступ для интеграционных тестов и будущих триггеров; владелец состояния один, дублирования нет |
 
 ---
 
@@ -408,6 +441,10 @@
 > `data/dialogue_loader.py` — `load_dialogues(path: Path) → list[Dialogue]`. Поднимает `DialogueLoadError` при любой ошибке (нет файла / битый JSON / нет обязательных полей / дубли id узлов / висячие ссылки / пустой диалог без узлов).
 > Формат `dialogues.json`: `{"dialogues": [{id, start_id, nodes: [{id, speaker, text, choices: [{text, next_id}]}]}]}`. `choices` и `next_id` опциональны; `next_id == ""` (или опущен) = конец диалога; узел без `choices` = терминальный.
 > Loader строит `nodes` (список в JSON) в `dict[str, DialogueNode]` и валидирует целостность ссылок: start_id и все непустые next_id должны указывать на существующий узел.
+> `DialogueUI(dialogue_system, on_close)` — оверлей диалога (BaseScreen). UP/DOWN навигация по вариантам (циклическая), ENTER — `choose(index)` на не-терминальном узле / `advance()` на терминальном (завершает диалог), ESC — `on_close()` (НЕ завершает диалог). Только отображение+ввод; состояние читается из DialogueSystem.
+> Диалоги интегрированы в игру (8F): клавиша `T` в GameScreen запускает `ranger_intro` и открывает DialogueUI. `GameScreen._dialogues` — `dict[str, Dialogue]` из `dialogues.json`; `GameScreen._dialogue_system` — единственный владелец состояния (read-only property `dialogue_system`).
+> Закрытие оверлея диалога: НЕ в DialogueUI. GameScreen подписан на EventBus `dialogue_ended` → `_on_dialogue_ended` → снимает DialogueUI через `state_manager.pop` (только если сверху именно DialogueUI). ESC закрывает оверлей сразу через `on_close` (диалог при этом не завершается).
+> Новый диалог в игре → добавить запись в `dialogues.json` и вызвать `_start_dialogue(id)` из нужного триггера (пока только клавиша T для MVP). NPC/триггеры на карте — следующие спринты.
 
 ---
 

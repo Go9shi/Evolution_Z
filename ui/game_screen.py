@@ -4,6 +4,8 @@ from typing import Any, cast
 import pygame
 
 from core.item import Item
+from data.dialogue_data import Dialogue
+from data.dialogue_loader import load_dialogues
 from data.enemy_data import EnemyData
 from data.player_data import PlayerData
 from data.quest_data import Quest
@@ -18,6 +20,7 @@ from entities.zombie import RunnerZombie, SpitterZombie, WalkerZombie, Zombie
 from settings import DATA_DIR, TILE_SIZE
 from systems.camera import Camera
 from systems.combat import CombatSystem
+from systems.dialogue import DialogueSystem
 from systems.event_bus import EventBus
 from systems.game_world import GameWorld
 from systems.quest_system import QuestSystem
@@ -47,10 +50,18 @@ class GameScreen(BaseScreen):
         self._quest_system = QuestSystem(self._player.experience)
         for quest in self._load_quests():
             self._quest_system.accept_quest(quest)
+        self._dialogue_system = DialogueSystem()
+        self._dialogues: dict[str, Dialogue] = {d.id: d for d in self._load_dialogues()}
         EventBus.on("entity_died", self._on_entity_died)
+        EventBus.on("dialogue_ended", self._on_dialogue_ended)
+
+    @property
+    def dialogue_system(self) -> DialogueSystem:
+        """Система диалогов — владелец состояния активного диалога (только чтение)."""
+        return self._dialogue_system
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        """ЛКМ — выстрел. F — предмет. Tab — дерево навыков. J — журнал квестов."""
+        """ЛКМ — выстрел. F — предмет. Tab — навыки. J — квесты. T — тестовый диалог."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_world = pygame.Vector2(event.pos) + self._camera.offset
             direction = mouse_world - self._player.pos
@@ -68,6 +79,8 @@ class GameScreen(BaseScreen):
             if self._state_manager is not None:
                 from ui.quest_log_ui import QuestLogUI
                 self._state_manager.push(QuestLogUI(self._quest_system, self._state_manager.pop))
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_t:
+            self._start_dialogue("ranger_intro")
 
     def update(self, dt: float) -> None:
         walls = self._world.wall_rects
@@ -119,6 +132,37 @@ class GameScreen(BaseScreen):
     def _load_quests() -> list[Quest]:
         """Загрузить квесты уровня из assets/data/quests.json."""
         return load_quests(DATA_DIR / "quests.json")
+
+    @staticmethod
+    def _load_dialogues() -> list[Dialogue]:
+        """Загрузить диалоги уровня из assets/data/dialogues.json."""
+        return load_dialogues(DATA_DIR / "dialogues.json")
+
+    def _start_dialogue(self, dialogue_id: str) -> None:
+        """Запустить диалог по id и открыть DialogueUI поверх игры.
+
+        Нет-оп, если нет state_manager или id не найден среди загруженных диалогов.
+        """
+        if self._state_manager is None:
+            return
+        dialogue = self._dialogues.get(dialogue_id)
+        if dialogue is None:
+            return
+        from ui.dialogue_ui import DialogueUI
+        self._dialogue_system.start(dialogue)
+        self._state_manager.push(DialogueUI(self._dialogue_system, self._state_manager.pop))
+
+    def _on_dialogue_ended(self, data: dict[str, Any]) -> None:
+        """Снять оверлей диалога и вернуться в игру при завершении диалога.
+
+        Реакция на EventBus-событие: DialogueSystem завершает диалог (end), а закрытие
+        экрана — задача интеграции. Снимаем только если сверху действительно DialogueUI.
+        """
+        if self._state_manager is None:
+            return
+        from ui.dialogue_ui import DialogueUI
+        if isinstance(self._state_manager.current, DialogueUI):
+            self._state_manager.pop()
 
     @staticmethod
     def _load_player_config() -> PlayerData:
