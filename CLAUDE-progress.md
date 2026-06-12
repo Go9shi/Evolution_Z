@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 9B — Patient Zero Boss Core ✅ (сущность босса: HP, faction, урон, смерть, boss_defeated)  
+**Спринт:** 9C — Boss Integration ✅ (босс в игровом цикле; победа по boss_defeated)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -365,6 +365,23 @@
 - EventBus: `boss_defeated` эмитится при смерти; данные содержат `{boss}`; не эмитится при не-летальном; ровно один раз при повторных/избыточных ударах; `entity_died` тоже эмитится (совместимость)
 - Интеграция: пуля игрока ранит босса через CombatSystem; вражеская пуля не бьёт (faction-фильтр); combat убивает босса и эмитит событие; мёртвый босс игнорируется combat; `heal` следует Entity-паттерну
 
+### Спринт 9C — Boss Integration ✅ (завершён)
+Цель: `PatientZeroBoss` становится частью игрового цикла — встретить, атаковать, убить, получить победу. БЕЗ AI/фаз/спец-атак/призыва/звука/катсцен/нового UI-экрана/сейвов.
+- [x] `settings.py` — `BOSS_MAX_HEALTH = 600` (конфиг HP босса; константы — в settings по CLAUDE.md)
+- [x] `entities/boss.py` — `Boss.xp_reward: int = 0` (НЕОБХОДИМО: босс faction='enemy' проходит через `_on_entity_died`, который читает `entity.xp_reward`; поле завершает enemy-контракт как у `Zombie.xp_reward`; 0 = без награды)
+- [x] `ui/game_screen.py` — `self._boss = self._spawn_boss()` (одно поле, не список — босс один); инлайн-координаты Комнаты 4 (43,18), HP из `BOSS_MAX_HEALTH`; босс обновляется (`update(dt)`), участвует в combat (`targets=[*enemies, player, boss]`), рисуется при `active`
+- [x] `ui/game_screen.py` — подписка `boss_defeated` → `_on_boss_defeated` → `self._victory = True`; read-only property `victory`; победный результат — центрированный текст «VICTORY — PATIENT ZERO DEFEATED» (минимальный срез, без нового экрана)
+- [x] `tests/test_boss_integration.py` — 21 тест
+- [x] Smoke (headless): босс 600 HP → атака через combat → смерть → `victory=True` → draw победного текста; босс даёт 0 XP без падения
+- [x] Заблокированные системы (Quest/Dialogue/Lore/Inventory/SkillTree + их UI) НЕ менялись
+
+### Тесты — 645 тестов, все зелёные ✅ (после Спринта 9C)
++21 тест в `tests/test_boss_integration.py`:
+- Спавн: босс создан; тип `PatientZeroBoss`; активен; HP = `BOSS_MAX_HEALTH`; faction='enemy'
+- Игровой цикл: переживает обычный update; получает урон через combat; несколько кадров урона; draw без падения
+- Победа: смерть эмитит `boss_defeated` ({boss}); GameScreen ставит `victory`; победа через combat-путь; не ломает update/draw; мёртвый босс не рисуется/обновляется
+- Регрессии: зомби по-прежнему спавнятся; убийство зомби даёт XP; босс даёт 0 XP (без падения `_on_entity_died`); мёртвые зомби пруна­тся; системы на месте; диалог по `T` открывается
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -400,7 +417,9 @@
 
 ### Спринт 9 — Финальный босс
 - [x] `entities/boss.py` — базовый `Boss(Entity)` + `PatientZeroBoss` — **ядро** (9B): HP, faction, урон, смерть, `boss_defeated`
-- [ ] Расширение `PatientZeroBoss` — 3 фазы, спец-атаки, призыв врагов (будущий спринт)
+- [x] Интеграция босса в GameScreen (9C): спавн в Комнате 4, combat/урон/смерть, победное состояние по `boss_defeated`
+- [ ] Расширение `PatientZeroBoss` — 3 фазы, спец-атаки, призыв врагов, AI (будущий спринт)
+- [ ] Экран/катсцена победы, концовки (хорошая/плохая) — будущий спринт
 - [ ] `assets/maps/eden7.tmx` — арена финального боя
 - [ ] Логика концовок: хорошая / плохая
 
@@ -506,6 +525,10 @@
 | 2026-06-12 | Иерархия `Entity → Boss → PatientZeroBoss` (Boss — отдельная ветвь, не под Zombie) | строго по CLAUDE.md/README; демонстрация наследования (цель ООП-проекта); `Boss` базовый держит общую boss-логику (rect, boss_defeated), `PatientZeroBoss` — конкретный финальный |
 | 2026-06-12 | `boss_defeated` эмитится в override `Boss.take_damage` на переходе жив→мёртв | переиспользует единственную точку детекции смерти (Entity.take_damage), не вводит новую событийную архитектуру; `was_alive and not is_alive` гарантирует ровно одно событие при повторных/избыточных ударах; `entity_died` остаётся (death-паттерн врагов) |
 | 2026-06-12 | `PatientZeroBoss(x, y, max_health)` — max_health инжектится, размер `TILE_SIZE*2` | без магических чисел: HP задаёт вызывающий (позже из JSON), размер — из settings; ядро не создаёт BossData/JSON-загрузчик (вне скоупа 9B, как loader откладывался у quest/lore) |
+| 2026-06-12 | Босс — отдельное поле `GameScreen._boss`, не в `_enemies` | босс один (не список); `_enemies: list[Zombie]` типизирован Zombie, а `Boss(Entity)` не Zombie и имеет другую сигнатуру update; combat-участие — через включение в `targets`, без новой структуры |
+| 2026-06-12 | `Boss.xp_reward = 0` добавлен в 9C (необходимое изменение) | босс faction='enemy' проходит через существующий `_on_entity_died`, который читает `entity.xp_reward`; без поля — AttributeError при интеграции; решение завершает enemy-контракт (как `Zombie.xp_reward`), оставляя generic XP-обработчик GameScreen неизменным → «XP за зомби не ломается» гарантировано |
+| 2026-06-12 | `BOSS_MAX_HEALTH` в settings.py, координаты спавна инлайн в `_spawn_boss` | CLAUDE.md: константы — в settings; позиции врагов уже инлайн в `_spawn_enemies` — босс следует тому же паттерну; босс-JSON/загрузчик не вводятся (минимальный срез, без новой архитектуры) |
+| 2026-06-12 | Победа = флаг `_victory` + текст в `GameScreen.draw`, без нового экрана | требование «минимальный вертикальный срез, без VictoryScreen»; реакция на существующее `boss_defeated` через EventBus (паттерн `entity_died`→`_on_entity_died`); read-only `victory` property для тестов/будущих концовок |
 
 ---
 
@@ -541,7 +564,8 @@
 > `QuestItem.use(player)` — возвращает False, из инвентаря не удаляется.
 > EventBus-события инвентаря: `inventory_item_added`, `inventory_item_removed`, `item_used`.
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
-> `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}). НЕ интегрирован в GameScreen (нет спавна/арены) — это будущий спринт. Фазы/спец-атаки/призыв — тоже будущее.
+> `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `xp_reward=0` (9C), `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}).
+> Босс интегрирован в GameScreen (9C): `_boss` спавнится в Комнате 4 (HP=`settings.BOSS_MAX_HEALTH`), обновляется/рисуется при `active`, входит в combat-`targets`. Подписка `boss_defeated` → `_on_boss_defeated` → `_victory=True`; `GameScreen.victory` (read-only) + победный текст в draw. Босс даёт 0 XP. ВНИМАНИЕ: босс — faction='enemy', поэтому его смерть инкрементит активные KillZombieObjective (generic-фильтр QuestSystem) — будущая балансировка/раздельные цели.
 > `InventoryUI(inventory, on_close)` — оверлей инвентаря (BaseScreen). Открывается клавишей `I` в GameScreen (lazy import, `on_close=state_manager.pop`). UP/DOWN циклическая навигация, ESC закрывает. Только чтение через `inventory.items` (+ `count`/`capacity`); состояние не дублирует. Пустой → «Inventory is empty.». Показывает имена списком + description выбранного. `ui/inventory_ui.py` больше не стаб.
 > `player.skill_tree` — `SkillTree`. `skill_tree.add_point()` вызывается через EventBus `player_level_up` (по одному разу на каждый level-up). `skill_tree.upgrade(SkillType.X, player)` — тратит 1 очко, применяет эффект. Константы: `HP_PER_LEVEL=20`, `HUNGER_REDUCTION_PER_LEVEL=0.5`, `DAMAGE_PER_LEVEL=5.0`, `MAX_SKILL_LEVEL=5`.
 > `player.apply_weapon_damage_bonus(bonus)` — передаёт бонус в `_weapon.add_damage_bonus()`; no-op если оружие не экипировано.

@@ -13,12 +13,13 @@ from data.quest_data import Quest
 from data.quest_loader import load_quests
 from data.spitter_data import SpitterData
 from data.weapon_config import WeaponConfig
+from entities.boss import PatientZeroBoss
 from entities.items.food_item import FoodItem
 from entities.items.quest_item import QuestItem
 from entities.player import Player
 from entities.weapons.pistol import Pistol
 from entities.zombie import RunnerZombie, SpitterZombie, WalkerZombie, Zombie
-from settings import DATA_DIR, TILE_SIZE
+from settings import BOSS_MAX_HEALTH, DATA_DIR, SCREEN_H, SCREEN_W, TILE_SIZE
 from systems.camera import Camera
 from systems.combat import CombatSystem
 from systems.dialogue import DialogueSystem
@@ -47,6 +48,9 @@ class GameScreen(BaseScreen):
         self._player.equip(Pistol(self._load_weapon_config("pistol")))
         self._camera = Camera()
         self._enemies: list[Zombie] = self._spawn_enemies()
+        self._boss: PatientZeroBoss = self._spawn_boss()
+        self._victory: bool = False
+        self._font_victory = pygame.font.SysFont("monospace", 44, bold=True)
         self._combat = CombatSystem()
         self._world_items: list[Item] = self._spawn_items()
         self._quest_system = QuestSystem(self._player.experience)
@@ -61,11 +65,17 @@ class GameScreen(BaseScreen):
         EventBus.on("entity_died", self._on_entity_died)
         EventBus.on("dialogue_ended", self._on_dialogue_ended)
         EventBus.on("dialogue_choice_selected", self._on_dialogue_choice)
+        EventBus.on("boss_defeated", self._on_boss_defeated)
 
     @property
     def dialogue_system(self) -> DialogueSystem:
         """Система диалогов — владелец состояния активного диалога (только чтение)."""
         return self._dialogue_system
+
+    @property
+    def victory(self) -> bool:
+        """Достигнуто ли победное состояние (босс повержен)."""
+        return self._victory
 
     def handle_event(self, event: pygame.event.Event) -> None:
         """ЛКМ — выстрел. F — предмет. I — инвентарь. Tab — навыки. J — квесты. L — лор. T — диалог."""
@@ -110,7 +120,10 @@ class GameScreen(BaseScreen):
                 self._combat.add_bullets(enemy.collect_spawned_bullets())
         self._enemies = [e for e in self._enemies if e.active]
 
-        self._combat.update(dt, walls, [*self._enemies, self._player])
+        if self._boss.active:
+            self._boss.update(dt)
+
+        self._combat.update(dt, walls, [*self._enemies, self._player, self._boss])
 
         for item in self._world_items:
             if item.active and self._player.rect.colliderect(item.rect):
@@ -124,8 +137,17 @@ class GameScreen(BaseScreen):
             item.draw(surface, self._camera.offset)
         for enemy in self._enemies:
             enemy.draw(surface, self._camera.offset)
+        if self._boss.active:
+            self._boss.draw(surface, self._camera.offset)
         self._combat.draw(surface, self._camera.offset)
         self._player.draw(surface, self._camera.offset)
+        if self._victory:
+            self._draw_victory(surface)
+
+    def _draw_victory(self, surface: pygame.Surface) -> None:
+        """Минимальный победный результат: центрированное текстовое сообщение."""
+        text = self._font_victory.render("VICTORY — PATIENT ZERO DEFEATED", True, (240, 230, 120))
+        surface.blit(text, text.get_rect(center=(SCREEN_W // 2, SCREEN_H // 2)))
 
     # ── private helpers ────────────────────────────────────────────────────
 
@@ -144,6 +166,20 @@ class GameScreen(BaseScreen):
             # Комната 4: один спиттер
             SpitterZombie(37 * ts + ts / 2, 17 * ts + ts / 2, s),
         ]
+
+    def _spawn_boss(self) -> PatientZeroBoss:
+        """Создать финального босса.
+
+        Минимальное решение: координаты спавна заданы инлайн (как у `_spawn_enemies`) —
+        интерьер Комнаты 4 (rows 15–20, cols 29–45), отдельно от спиттера. max_health —
+        из `settings.BOSS_MAX_HEALTH` (конфигурируемая константа, не магическое число).
+        """
+        ts = TILE_SIZE
+        return PatientZeroBoss(43 * ts + ts / 2, 18 * ts + ts / 2, BOSS_MAX_HEALTH)
+
+    def _on_boss_defeated(self, data: dict[str, Any]) -> None:
+        """Установить победное состояние при гибели босса (EventBus `boss_defeated`)."""
+        self._victory = True
 
     @staticmethod
     def _load_quests() -> list[Quest]:

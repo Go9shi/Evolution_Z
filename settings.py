@@ -15,6 +15,9 @@ SPRITES_DIR: Path = ASSETS_DIR / "sprites"
 SOUNDS_DIR: Path = ASSETS_DIR / "sounds"
 SAVES_DIR: Path = BASE_DIR / "saves"
 
+# Босс
+BOSS_MAX_HEALTH: int = 600
+
 # Тайлы
 TILE_SIZE: int = 32
 TILE_FLOOR_COLOR: tuple[int, int, int] = (45, 45, 55)

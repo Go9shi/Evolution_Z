@@ -16,6 +16,10 @@ class Boss(Entity):
     """
 
     COLOR: tuple[int, int, int] = (120, 30, 120)
+    # Босс — faction='enemy', значит проходит через путь начисления XP за врагов
+    # (GameScreen._on_entity_died читает entity.xp_reward). Поле нужно для совместимости
+    # с этим путём, как у Zombie.xp_reward; 0 = без награды (балансировка — будущий спринт).
+    xp_reward: int = 0
 
     def __init__(self, x: float, y: float, max_health: int, width: int, height: int) -> None:
         super().__init__(x, y, max_health)
