@@ -8,8 +8,8 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 8D — Narrative Foundation (данные и модель) ✅  
-**Дата последнего обновления:** 2026-06-11
+**Спринт:** 8E — Нарратив: системы (в работе) · DialogueSystem ✅  
+**Дата последнего обновления:** 2026-06-12
 
 ---
 
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Ничего — Спринт 8C завершён, ждём старта следующего спринта
+- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ сделана. Осталось: `systems/lore.py` (записки/терминалы), сюжетные события глав 1–3, интеграция диалогов в GameScreen/UI.
 
 ---
 
@@ -243,10 +243,22 @@
 
 ### Тесты — 387 тестов, все зелёные ✅ (после Спринта 8D)
 
-### Спринт 8E — Нарратив: системы (следующий, НЕ в 8D)
+### Спринт 8E — Нарратив: системы (в работе)
+- [x] `data/dialogue_data.py` — `@dataclass DialogueChoice` (text, next_id), `DialogueNode` (id, speaker, text, choices, `is_terminal`), `Dialogue` (id, nodes, start_id)
+- [x] `systems/dialogue.py` — `DialogueError` + `DialogueSystem`: `start`, `is_active`, `current_node`, `advance` (линейный), `choose(index)` (ветвление), `end`; EventBus-события `dialogue_started` / `dialogue_node_changed` / `dialogue_ended`; без isinstance (ветвление по `len(choices)`)
+- [x] `tests/test_dialogue.py` — 32 теста (данные, старт+валидация, advance, choose, end, EventBus, интеграция)
 - [ ] `systems/lore.py` — записки и терминалы
-- [ ] `systems/dialogue.py` — диалоги
 - [ ] Сюжетные события глав 1–3
+- [ ] Интеграция диалогов в GameScreen/UI (отдельная под-задача, как loader 8C / UI 8B)
+
+### Тесты — 419 тестов, все зелёные ✅ (после DialogueSystem в 8E)
++32 теста в `tests/test_dialogue.py`:
+- DialogueChoice / DialogueNode / Dialogue: поля, дефолты, `is_terminal`
+- start: активация, стартовый узел, ошибка при отсутствии start_id, события started + node_changed
+- advance: переход по линии, завершение на терминальном узле, событие node_changed, ошибка без активного диалога, ошибка при нескольких выборах, пустой next_id → end
+- choose: первая/вторая ветка, индекс вне диапазона, отрицательный индекс, без активного диалога, висячая ссылка, пустой next_id → end
+- end: очистка состояния, событие ended, нет-оп без активного диалога
+- Integration: полный проход с ветвлением и порядком событий; перезапуск после end
 
 ### Спринт 9 — Финальный босс
 - [ ] `entities/boss.py` — базовый `Boss(Entity)` + `PatientZeroBoss` (3 фазы)
@@ -315,6 +327,11 @@
 | 2026-06-11 | `_OBJECTIVE_BUILDERS: dict[str, Callable]` (type → builder) | data-driven диспетчер без isinstance; новый тип Objective = одна строка в dict; builder-функции локальны в модуле → нет circular import (в отличие от skill_tree, где dict на уровне модуля создавал бы цикл) |
 | 2026-06-11 | narrative-поля `lore_text/location/category` опциональны (default `""`), НЕ в `_REQUIRED_QUEST_FIELDS` | обратная совместимость: старые квесты без полей грузятся; loader читает через `.get(..., "")`; данные остаются data-driven, без хардкода в коде |
 | 2026-06-11 | QuestSystem не читает narrative-поля; только QuestLogUI отображает их (`_format_meta`) | разделение: метаданные — для отображения, не для логики прохождения; UI рисует строку только если поля непусты — нет мусора у старых квестов |
+| 2026-06-12 | Диалоги: `data/dialogue_data.py` (dataclasses) + `systems/dialogue.py` (рантайм) | прямая аналогия quest: `quest_data.py` + `quest_system.py`. Слой данных — обязательный нижний слой по CLAUDE.md (data → systems), не расширение скоупа |
+| 2026-06-12 | Диалог как граф `dict[str, DialogueNode]` + `start_id`, переходы по `next_id` | ветвление и линейный диалог одной моделью; `next_id == ""` = конец; узел без choices = терминальный (`is_terminal`) |
+| 2026-06-12 | `advance()` (0–1 выбор) vs `choose(index)` (ветвление); ветвление по `len(choices)`, не isinstance | isinstance запрещён CLAUDE.md; `advance()` при >1 выборе поднимает DialogueError — caller обязан вызвать `choose()` |
+| 2026-06-12 | `DialogueSystem` сообщает о состоянии только через EventBus (`dialogue_started/node_changed/ended`) | UI и прочие системы подписываются; нет прямых импортов UI в системе — как QuestSystem эмитит `quest_completed` |
+| 2026-06-12 | JSON-загрузчик диалогов и UI вынесены из задачи | повторяет инкремент quest: 8B (UI) и 8C (loader) делались отдельно; данная задача — только рантайм-система + слой данных |
 
 ---
 
@@ -370,6 +387,10 @@
 > Формат `quests.json`: `{"quests": [{id, title, description, reward_xp, objectives: [{type, ...}]}]}`. Тип цели `"kill_zombie"` требует `target_count`.
 > Новый тип Objective в JSON → добавить builder и строку в `_OBJECTIVE_BUILDERS` в `quest_loader.py` (плюс класс в `quest_data.py`). isinstance не используется.
 > `GameScreen._load_quests()` читает `DATA_DIR/quests.json`; инлайн-квестов в коде больше НЕТ. Стартовый квест уровня — `clear_bunker_a1` (4 зомби, 100 XP).
+> `DialogueSystem` — рантайм диалогов. `start(dialogue)` активирует; `current_node` / `is_active` — состояние; `advance()` — линейный шаг (0 выборов→конец, 1→переход, >1→DialogueError); `choose(index)` — ветвление; `end()` — завершить (нет-оп если не активен).
+> Модель диалога: `Dialogue(id, nodes: dict[str, DialogueNode], start_id)`. `DialogueNode(id, speaker, text, choices)`, `is_terminal` = нет choices. `DialogueChoice(text, next_id)`, `next_id == ""` → конец диалога.
+> EventBus-события диалога: `dialogue_started` ({dialogue}), `dialogue_node_changed` ({node}), `dialogue_ended` ({dialogue}). UI подписывается на них — прямых вызовов из системы в UI нет.
+> Диалоги НЕ интегрированы в GameScreen/UI и НЕ грузятся из JSON — это отдельные под-задачи Спринта 8E (как loader 8C / UI 8B у квестов).
 
 ---
 
