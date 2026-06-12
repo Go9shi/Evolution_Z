@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 8F — Dialogue Integration ✅ (DialogueSystem ✅ · Loader ✅ · UI ✅ · интеграция в GameScreen ✅)  
+**Спринт:** 8G — Quest ↔ Dialogue Integration ✅ (диалог выдаёт существующий квест через EventBus)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ + DialogueUI ✅ + интеграция в GameScreen ✅ (8F) сделаны. Осталось: `systems/lore.py` (записки/терминалы), сюжетные события глав 1–3.
+- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ + DialogueUI ✅ + интеграция в GameScreen ✅ (8F) + Quest↔Dialogue ✅ (8G) сделаны. Осталось: `systems/lore.py` (записки/терминалы), сюжетные события глав 1–3.
 
 ---
 
@@ -262,6 +262,24 @@
 - [x] `tests/test_dialogue_integration.py` — 14 тестов
 - [x] Smoke (headless): GameScreen → T → DialogueUI → выбор → терминал → ENTER → авто-возврат в GameScreen → игра продолжается
 
+### Спринт 8G — Quest ↔ Dialogue Integration ✅ (завершён)
+Цель: связать существующие системы диалогов и квестов — диалог выдаёт существующий квест. БЕЗ NPC, lore, глав, сейвов, боссов, новых типов квестов/узлов.
+- [x] `data/dialogue_data.py` — `DialogueChoice` получил опциональное поле `quest_id` (default `""`); диалог трактует его как opaque-ссылку, о квестах не знает
+- [x] `systems/dialogue.py` — `choose()` и `advance()` маршрутизированы через `_select(choice)`, который эмитит EventBus `dialogue_choice_selected` ({choice}); DialogueSystem не зависит от QuestSystem
+- [x] `data/dialogue_loader.py` — `_build_choice` читает `quest_id` через `.get(..., "")` (опционально, обратная совместимость)
+- [x] `assets/data/dialogues.json` — у выбора «I'll help clear the bunker» в `ranger_intro` добавлен `"quest_id": "clear_bunker_a1"`; структура узлов сохранена (старые тесты целы)
+- [x] `ui/game_screen.py` — квесты грузятся в реестр `self._quests: dict[str, Quest]` БЕЗ авто-принятия; подписка на `dialogue_choice_selected` → `_on_dialogue_choice` → `accept_quest` по quest_id из реестра
+- [x] `tests/test_quest_dialogue_integration.py` — 17 тестов
+- [x] Smoke (headless): T → диалог → выбор → квест выдан → J → журнал → 4 убийства → завершён → XP 100 → level 2
+
+### Тесты — 500 тестов, все зелёные ✅ (после Спринта 8G)
++17 тестов в `tests/test_quest_dialogue_integration.py`:
+- Событие выбора: `choose`/`advance` эмитят `dialogue_choice_selected` с quest_id; терминальный узел не эмитит; вариант без квеста несёт пустой quest_id
+- Принятие: выбор с quest_id выдаёт квест; квест среди активных; «Not now» (без quest_id) не выдаёт
+- Безопасность: неизвестный quest_id; пустой quest_id; событие без ключа `choice`; повторный выбор не дублирует; повторная выдача завершённого квеста — нет-оп
+- Полный сценарий: диалог → выбор → квест → 4 убийства → завершение → XP 100 → level 2; прогресс цели работает как раньше после выдачи
+- Регрессии: обычный диалог (ветка без квеста) работает; обычный жизненный цикл квеста (принят напрямую) работает; событие выбора не ломает update/draw
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -379,6 +397,11 @@
 | 2026-06-12 | Завершение диалога закрывает оверлей через EventBus `dialogue_ended` → `GameScreen._on_dialogue_ended` → `pop` | DialogueUI остаётся чистым экраном (8E.2: end() не дёргает on_close); закрытие — задача интеграции; реакция на событие повторяет `entity_died`→`_on_entity_died`; isinstance здесь — guard стека, не полиморфный dispatch |
 | 2026-06-12 | `_start_dialogue` — нет-оп при `state_manager is None` и неизвестном id (`dict.get` → None) | отсутствующий диалог и отсутствие менеджера не ломают игру; safe-by-default, без исключений в игровом цикле |
 | 2026-06-12 | read-only property `GameScreen.dialogue_system` | минимальный доступ для интеграционных тестов и будущих триггеров; владелец состояния один, дублирования нет |
+| 2026-06-12 | Связь quest↔dialogue через EventBus `dialogue_choice_selected`, а не прямой вызов | предпочтительный подход из задачи 8G; DialogueSystem остаётся владельцем диалогов, QuestSystem — квестов; GameScreen — интеграционный слой; нет прямого импорта QuestSystem в DialogueSystem |
+| 2026-06-12 | `quest_id: str = ""` на `DialogueChoice` (data-driven, не `if dialogue_id ==`) | выдаваемый квест задаётся в JSON, не хардкодом; диалог трактует id как opaque-данные; минимальное расширение JSON по требованию задачи |
+| 2026-06-12 | `choose`/`advance` маршрутизированы через `_select(choice)` → эмит `dialogue_choice_selected` | единая точка эмита для ветвления и линейного шага; терминальный узел (0 choices) не проходит через `_select` → не эмитит; новое событие не ломает существующие проверки порядка (они слушают только started/node_changed/ended) |
+| 2026-06-12 | GameScreen грузит квесты в реестр `_quests` БЕЗ авто-принятия; диалог выдаёт через `accept_quest` | без этого выдача из диалога была бы нет-оп (квест уже ACTIVE); квест появляется в журнале только после диалога — как требует сценарий 8G; ни один тест не завязан на авто-принятие старта |
+| 2026-06-12 | `_on_dialogue_choice` читает quest_id через `getattr(choice, "quest_id", "")`, выдаёт из реестра | безопасно при пустом/неизвестном quest_id (`_quests.get`→None) и повторной выдаче (`accept_quest` нет-оп для не-AVAILABLE); isinstance не нужен — opaque-доступ к данным |
 
 ---
 
@@ -428,7 +451,8 @@
 > `KillZombieObjective.on_kill("enemy")` не превышает `target_count` — guard `not self.is_complete` внутри метода.
 > `Objective.progress` — абстрактное property → str; `KillZombieObjective.progress` отдаёт `"current/target"`. Используется QuestLogUI для отображения без isinstance.
 > `QuestLogUI(quest_system, on_close)` — только чтение; навигация UP/DOWN, ESC закрывает. В GameScreen открывается по клавише J (lazy import), `on_close = state_manager.pop`.
-> `GameScreen._quest_system` — `QuestSystem(player.experience)`; стартовый квест `Clear Bunker A1` (KillZombieObjective=4) принимается в `__init__`. Прогресс идёт автоматически через подписку QuestSystem на `entity_died`.
+> `GameScreen._quest_system` — `QuestSystem(player.experience)`. Квесты из `quests.json` грузятся в реестр `GameScreen._quests: dict[str, Quest]` и НЕ принимаются автоматически (Sprint 8G): их выдаёт диалог. Прогресс идёт автоматически через подписку QuestSystem на `entity_died`.
+> Quest↔Dialogue (8G): выбор варианта с непустым `DialogueChoice.quest_id` → DialogueSystem эмитит `dialogue_choice_selected` ({choice}) → `GameScreen._on_dialogue_choice` → `accept_quest(_quests[quest_id])`. Безопасно при пустом/неизвестном id и повторной выдаче. Новый квест, выдаваемый диалогом → добавить запись в `quests.json` + `quest_id` в нужный choice в `dialogues.json`.
 > EventBus: при гибели врага срабатывают ДВА независимых подписчика — `GameScreen._on_entity_died` (XP за килл) и `QuestSystem._on_entity_died` (прогресс квеста). Не конфликтуют.
 > `data/quest_loader.py` — `load_quests(path: Path) → list[Quest]`. Поднимает `QuestLoadError` при любой ошибке (нет файла / битый JSON / неизвестный тип цели / нет обязательных полей).
 > Формат `quests.json`: `{"quests": [{id, title, description, reward_xp, objectives: [{type, ...}]}]}`. Тип цели `"kill_zombie"` требует `target_count`.

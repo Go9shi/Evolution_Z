@@ -48,12 +48,13 @@ class GameScreen(BaseScreen):
         self._combat = CombatSystem()
         self._world_items: list[Item] = self._spawn_items()
         self._quest_system = QuestSystem(self._player.experience)
-        for quest in self._load_quests():
-            self._quest_system.accept_quest(quest)
+        # Квесты загружены в реестр, но не приняты: их выдаёт диалог (Sprint 8G).
+        self._quests: dict[str, Quest] = {q.id: q for q in self._load_quests()}
         self._dialogue_system = DialogueSystem()
         self._dialogues: dict[str, Dialogue] = {d.id: d for d in self._load_dialogues()}
         EventBus.on("entity_died", self._on_entity_died)
         EventBus.on("dialogue_ended", self._on_dialogue_ended)
+        EventBus.on("dialogue_choice_selected", self._on_dialogue_choice)
 
     @property
     def dialogue_system(self) -> DialogueSystem:
@@ -151,6 +152,22 @@ class GameScreen(BaseScreen):
         from ui.dialogue_ui import DialogueUI
         self._dialogue_system.start(dialogue)
         self._state_manager.push(DialogueUI(self._dialogue_system, self._state_manager.pop))
+
+    def _on_dialogue_choice(self, data: dict[str, Any]) -> None:
+        """Выдать квест, если выбранный вариант диалога ссылается на quest_id.
+
+        Реакция на EventBus-событие `dialogue_choice_selected`: связывает диалог и
+        квесты, не дублируя их состояние. QuestSystem остаётся владельцем квестов,
+        DialogueSystem — диалогов. Безопасно при пустом / неизвестном quest_id и при
+        повторной выдаче (accept_quest — нет-оп для уже принятого квеста).
+        """
+        choice = data.get("choice")
+        quest_id: str = getattr(choice, "quest_id", "")
+        if not quest_id:
+            return
+        quest = self._quests.get(quest_id)
+        if quest is not None:
+            self._quest_system.accept_quest(quest)
 
     def _on_dialogue_ended(self, data: dict[str, Any]) -> None:
         """Снять оверлей диалога и вернуться в игру при завершении диалога.

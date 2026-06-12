@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from data.dialogue_data import Dialogue, DialogueNode
+from data.dialogue_data import Dialogue, DialogueChoice, DialogueNode
 from systems.event_bus import EventBus
 
 
@@ -55,7 +55,7 @@ class DialogueSystem:
         if not node.choices:
             self.end()
             return
-        self._follow(node.choices[0].next_id)
+        self._select(node.choices[0])
 
     def choose(self, index: int) -> None:
         """Выбрать вариант ответа по индексу и перейти к связанному узлу.
@@ -65,7 +65,7 @@ class DialogueSystem:
         node = self._require_active()
         if index < 0 or index >= len(node.choices):
             raise DialogueError(f"Choice index {index} out of range for node '{node.id}'")
-        self._follow(node.choices[index].next_id)
+        self._select(node.choices[index])
 
     def end(self) -> None:
         """Завершить текущий диалог. Нет-оп, если диалог не идёт."""
@@ -75,6 +75,16 @@ class DialogueSystem:
         self._dialogue = None
         self._current = None
         EventBus.emit("dialogue_ended", {"dialogue": finished})
+
+    def _select(self, choice: DialogueChoice) -> None:
+        """Зафиксировать выбор варианта и перейти по нему.
+
+        Эмитит `dialogue_choice_selected` с самим выбором — интеграционный слой
+        читает из него opaque-данные (напр. quest_id). DialogueSystem о квестах
+        не знает: он лишь сообщает, какой вариант выбран.
+        """
+        EventBus.emit("dialogue_choice_selected", {"choice": choice})
+        self._follow(choice.next_id)
 
     def _follow(self, next_id: str) -> None:
         """Перейти к узлу next_id; пустой id завершает диалог."""
