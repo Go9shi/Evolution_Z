@@ -68,7 +68,7 @@ class GameScreen(BaseScreen):
         return self._dialogue_system
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        """ЛКМ — выстрел. F — предмет. Tab — навыки. J — квесты. T — тестовый диалог."""
+        """ЛКМ — выстрел. F — предмет. Tab — навыки. J — квесты. L — лор. T — диалог."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_world = pygame.Vector2(event.pos) + self._camera.offset
             direction = mouse_world - self._player.pos
@@ -86,6 +86,10 @@ class GameScreen(BaseScreen):
             if self._state_manager is not None:
                 from ui.quest_log_ui import QuestLogUI
                 self._state_manager.push(QuestLogUI(self._quest_system, self._state_manager.pop))
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_l:
+            if self._state_manager is not None:
+                from ui.lore_ui import LoreUI
+                self._state_manager.push(LoreUI(self._lore_system, self._state_manager.pop))
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_t:
             self._start_dialogue("ranger_intro")
 

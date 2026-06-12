@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 8I — Lore Integration ✅ (диалог открывает запись лора через EventBus)  
+**Спринт:** 8J — Lore UI ✅ (журнал открытых записей лора, клавиша L)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ + DialogueUI ✅ + интеграция в GameScreen ✅ (8F) + Quest↔Dialogue ✅ (8G) + LoreSystem ✅ (8H) + Lore↔Dialogue ✅ (8I) сделаны. Осталось: Lore UI / триггеры открытия записок на карте, сюжетные события глав 1–3.
+- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ + DialogueUI ✅ + интеграция в GameScreen ✅ (8F) + Quest↔Dialogue ✅ (8G) + LoreSystem ✅ (8H) + Lore↔Dialogue ✅ (8I) + Lore UI ✅ (8J) сделаны. Осталось: триггеры открытия записок/терминалов на карте, сюжетные события глав 1–3.
 
 ---
 
@@ -315,6 +315,23 @@
 - Полный сценарий: T → выбор → открытие записи → LoreSystem содержит запись; не ломает update/draw
 - Регрессии: обычный диалог без лора работает; Quest↔Dialogue (8G) не сломан; обычный жизненный цикл квеста; вариант с quest_id+lore_id выполняет обе интеграции
 
+### Спринт 8J — Lore UI ✅ (завершён)
+Цель: дать игроку просматривать открытые записи лора. По образцу SkillTreeUI / QuestLogUI / DialogueUI. БЕЗ NPC, глав, боссов, сейвов, меню, аудио.
+- [x] `ui/lore_ui.py` — `LoreUI(BaseScreen)`: `__init__(lore_system, on_close)`; UP/DOWN циклическая навигация, ESC → `on_close`; читает `lore_system.unlocked_entries` напрямую (копия на каждый вызов — не кэширует, не дублирует состояние); рендер title / `[category]` (если есть) / перенос текста по словам; пустое состояние «No lore entries discovered.»
+- [x] `ui/game_screen.py` — клавиша `L` → `LoreUI` (lazy import, `state_manager.push`, `on_close=state_manager.pop`); нет-оп при `state_manager is None`; повторяет паттерн Tab/J/T
+- [x] `tests/test_lore_ui.py` — 27 тестов
+- [x] Smoke (headless): T → открыть запись лора → L → LoreUI → ESC → возврат в GameScreen
+- [x] `LoreSystem` не менялся; UI использует только публичный `unlocked_entries`
+
+### Тесты — 568 тестов, все зелёные ✅ (после Спринта 8J)
++27 тестов в `tests/test_lore_ui.py`:
+- Инициализация: наследование BaseScreen; начальный индекс 0; пустая система безопасна; UI не кэширует (видит запись, открытую после создания)
+- Навигация: UP/DOWN; циклическая в обе стороны; одна запись; пустой список безопасен; игнор не-KEYDOWN
+- Закрытие: ESC → on_close ровно один раз; навигация не закрывает
+- Отрисовка: пусто / одна / несколько записей; без category; длинный текст (перенос); update — нет-оп
+- Живые данные: новая запись появляется без пересоздания UI; зарегистрированная-но-не-открытая не показывается; UI не хранит собственного списка (`_entries`/`_unlocked` отсутствуют)
+- Интеграция: L открывает LoreUI (depth 2); UI использует тот же `_lore_system`, что GameScreen; ESC возвращает в GameScreen; L нет-оп без state_manager
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -446,6 +463,9 @@
 | 2026-06-12 | `lore_id: str = ""` на `DialogueChoice` (data-driven, не `if node_id ==`) | открываемая запись задаётся в JSON, не хардкодом; диалог трактует id как opaque-данные; минимальное расширение модели по образцу `quest_id` |
 | 2026-06-12 | Лор-записи грузятся inline `GameScreen._load_lore_entries()` из `lore.json`, БЕЗ отдельного `lore_loader.py` | повторяет inline-паттерн player/weapon/enemy/item в GameScreen; интеграция 8I не требует валидирующего загрузчика; отдельный `lore_loader` (как quest/dialogue) — будущий инкремент при появлении Lore UI/триггеров |
 | 2026-06-12 | `_on_dialogue_choice` открывает лор через `getattr(choice, "lore_id", "")` → `lore_system.unlock` | безопасно при пустом/неизвестном lore_id (`unlock` нет-оп → False, без события) и при повторе; ранний `return` убран, чтобы quest_id и lore_id обрабатывались независимо в одном выборе |
+| 2026-06-12 | `LoreUI(lore_system, on_close)` читает `unlocked_entries` напрямую в draw/navigation | точная копия `QuestLogUI(quest_system, on_close)`: UI не кэширует и не дублирует состояние; `unlocked_entries` отдаёт копию → UI физически не может мутировать систему; живые данные без пересоздания UI |
+| 2026-06-12 | Клавиша `L` → LoreUI через lazy import в GameScreen | завершает ряд Tab→SkillTreeUI / J→QuestLogUI / T→Dialogue; lazy import исключает циклический импорт; `on_close=state_manager.pop`; нет-оп при `state_manager is None` |
+| 2026-06-12 | Перенос текста записи по словам (`LoreUI._wrap`) — презентационная логика в UI | лор-текст длиннее реплик/описаний; перенос — форматирование отображения, не игровая логика и не модель данных; держит draw читаемым и не роняет на длинном тексте |
 
 ---
 
@@ -500,6 +520,7 @@
 > Открытие записок на карте/терминалах → вызвать `lore_system.unlock(id)` из триггера (как `_start_dialogue`). Lore UI и триггеры на карте — следующие спринты; `ui/lore_ui.py` пока пустой стаб.
 > Lore↔Dialogue (8I): выбор варианта с непустым `DialogueChoice.lore_id` → DialogueSystem эмитит `dialogue_choice_selected` ({choice}) → `GameScreen._on_dialogue_choice` → `lore_system.unlock(lore_id)`. Безопасно при пустом/неизвестном id и повторе. Новая запись лора, открываемая диалогом → добавить запись в `lore.json` + `lore_id` в нужный choice в `dialogues.json`.
 > `GameScreen._lore_system` — `LoreSystem`; записи регистрируются из `lore.json` через `_load_lore_entries()` (inline json.load, как player/weapon/enemy/item). Один выбор диалога может нести и `quest_id`, и `lore_id` — обе интеграции независимы.
+> `LoreUI(lore_system, on_close)` — оверлей журнала лора (BaseScreen). Открывается клавишей `L` в GameScreen (lazy import, `on_close=state_manager.pop`). UP/DOWN циклическая навигация, ESC закрывает. Только чтение через `lore_system.unlocked_entries`; состояние не дублирует. Пустой журнал → «No lore entries discovered.». `ui/lore_ui.py` больше не стаб.
 > Quest↔Dialogue (8G): выбор варианта с непустым `DialogueChoice.quest_id` → DialogueSystem эмитит `dialogue_choice_selected` ({choice}) → `GameScreen._on_dialogue_choice` → `accept_quest(_quests[quest_id])`. Безопасно при пустом/неизвестном id и повторной выдаче. Новый квест, выдаваемый диалогом → добавить запись в `quests.json` + `quest_id` в нужный choice в `dialogues.json`.
 > EventBus: при гибели врага срабатывают ДВА независимых подписчика — `GameScreen._on_entity_died` (XP за килл) и `QuestSystem._on_entity_died` (прогресс квеста). Не конфликтуют.
 > `data/quest_loader.py` — `load_quests(path: Path) → list[Quest]`. Поднимает `QuestLoadError` при любой ошибке (нет файла / битый JSON / неизвестный тип цели / нет обязательных полей).
