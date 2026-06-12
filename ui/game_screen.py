@@ -7,6 +7,7 @@ from core.item import Item
 from data.dialogue_data import Dialogue
 from data.dialogue_loader import load_dialogues
 from data.enemy_data import EnemyData
+from data.lore_data import LoreEntry
 from data.player_data import PlayerData
 from data.quest_data import Quest
 from data.quest_loader import load_quests
@@ -23,6 +24,7 @@ from systems.combat import CombatSystem
 from systems.dialogue import DialogueSystem
 from systems.event_bus import EventBus
 from systems.game_world import GameWorld
+from systems.lore import LoreSystem
 from systems.quest_system import QuestSystem
 from ui.base_screen import BaseScreen
 
@@ -52,6 +54,10 @@ class GameScreen(BaseScreen):
         self._quests: dict[str, Quest] = {q.id: q for q in self._load_quests()}
         self._dialogue_system = DialogueSystem()
         self._dialogues: dict[str, Dialogue] = {d.id: d for d in self._load_dialogues()}
+        # Лор-записи регистрируются в каталоге; открывает их диалог (Sprint 8I).
+        self._lore_system = LoreSystem()
+        for entry in self._load_lore_entries():
+            self._lore_system.register(entry)
         EventBus.on("entity_died", self._on_entity_died)
         EventBus.on("dialogue_ended", self._on_dialogue_ended)
         EventBus.on("dialogue_choice_selected", self._on_dialogue_choice)
@@ -139,6 +145,13 @@ class GameScreen(BaseScreen):
         """Загрузить диалоги уровня из assets/data/dialogues.json."""
         return load_dialogues(DATA_DIR / "dialogues.json")
 
+    @staticmethod
+    def _load_lore_entries() -> list[LoreEntry]:
+        """Загрузить лор-записи уровня из assets/data/lore.json."""
+        with open(DATA_DIR / "lore.json", encoding="utf-8") as f:
+            raw: dict[str, list[dict]] = json.load(f)
+        return [LoreEntry(**entry) for entry in raw["lore"]]
+
     def _start_dialogue(self, dialogue_id: str) -> None:
         """Запустить диалог по id и открыть DialogueUI поверх игры.
 
@@ -154,20 +167,23 @@ class GameScreen(BaseScreen):
         self._state_manager.push(DialogueUI(self._dialogue_system, self._state_manager.pop))
 
     def _on_dialogue_choice(self, data: dict[str, Any]) -> None:
-        """Выдать квест, если выбранный вариант диалога ссылается на quest_id.
+        """Выдать квест и/или открыть лор по ссылкам выбранного варианта диалога.
 
-        Реакция на EventBus-событие `dialogue_choice_selected`: связывает диалог и
-        квесты, не дублируя их состояние. QuestSystem остаётся владельцем квестов,
-        DialogueSystem — диалогов. Безопасно при пустом / неизвестном quest_id и при
-        повторной выдаче (accept_quest — нет-оп для уже принятого квеста).
+        Реакция на EventBus-событие `dialogue_choice_selected`: связывает диалог с
+        квестами (Sprint 8G) и лором (Sprint 8I), не дублируя их состояние. QuestSystem
+        остаётся владельцем квестов, LoreSystem — лора, DialogueSystem — диалогов.
+        Безопасно при пустых / неизвестных id и при повторе (accept_quest и unlock —
+        нет-оп для уже принятого квеста / уже открытой записи).
         """
         choice = data.get("choice")
         quest_id: str = getattr(choice, "quest_id", "")
-        if not quest_id:
-            return
-        quest = self._quests.get(quest_id)
-        if quest is not None:
-            self._quest_system.accept_quest(quest)
+        if quest_id:
+            quest = self._quests.get(quest_id)
+            if quest is not None:
+                self._quest_system.accept_quest(quest)
+        lore_id: str = getattr(choice, "lore_id", "")
+        if lore_id:
+            self._lore_system.unlock(lore_id)
 
     def _on_dialogue_ended(self, data: dict[str, Any]) -> None:
         """Снять оверлей диалога и вернуться в игру при завершении диалога.

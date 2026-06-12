@@ -18,7 +18,7 @@
           "speaker": "Ranger",
           "text": "Good. Clear the infected from Bunker A1, then take this vaccine component.",
           "choices": [
-            { "text": "Thank you.", "next_id": "" }
+            { "text": "Thank you.", "next_id": "", "lore_id": "bunker_a1_origin" }
           ]
         },
         {

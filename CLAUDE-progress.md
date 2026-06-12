@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 8G — Quest ↔ Dialogue Integration ✅ (диалог выдаёт существующий квест через EventBus)  
+**Спринт:** 8I — Lore Integration ✅ (диалог открывает запись лора через EventBus)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -92,7 +92,7 @@
 
 ## В работе прямо сейчас
 
-- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ + DialogueUI ✅ + интеграция в GameScreen ✅ (8F) + Quest↔Dialogue ✅ (8G) сделаны. Осталось: `systems/lore.py` (записки/терминалы), сюжетные события глав 1–3.
+- [ ] Спринт 8E — Нарратив: системы. DialogueSystem ✅ + DialogueLoader ✅ + DialogueUI ✅ + интеграция в GameScreen ✅ (8F) + Quest↔Dialogue ✅ (8G) + LoreSystem ✅ (8H) + Lore↔Dialogue ✅ (8I) сделаны. Осталось: Lore UI / триггеры открытия записок на карте, сюжетные события глав 1–3.
 
 ---
 
@@ -280,6 +280,41 @@
 - Полный сценарий: диалог → выбор → квест → 4 убийства → завершение → XP 100 → level 2; прогресс цели работает как раньше после выдачи
 - Регрессии: обычный диалог (ветка без квеста) работает; обычный жизненный цикл квеста (принят напрямую) работает; событие выбора не ломает update/draw
 
+### Спринт 8H — Lore System ✅ (завершён)
+Цель: базовая система лора — слой `Lore Data → Lore System`, аналогично quest/dialogue. БЕЗ UI, глав, NPC, боссов, сейвов, JSON-загрузчика (нет данных-потребителей — отложен).
+- [x] `data/lore_data.py` — `@dataclass LoreEntry` (id, title, text, `category=""`); чистая модель данных
+- [x] `systems/lore.py` — `LoreSystem`: `register`, `has_entry`, `is_unlocked`, `unlock` (→ bool), `unlocked_entries` (копия, порядок открытия), `entries` (копия); EventBus-событие `lore_unlocked` ({entry}) ровно один раз на запись; неизвестный id и повторное открытие — нет-оп
+- [x] `tests/test_lore.py` — 25 тестов
+- [x] UI/LoreScreen НЕ создавался; `ui/lore_ui.py` остаётся пустым стабом (следующие спринты)
+
+### Тесты — 525 тестов, все зелёные ✅ (после Спринта 8H)
++25 тестов в `tests/test_lore.py`:
+- LoreEntry: поля, дефолт `category=""`
+- register/has_entry: регистрация делает запись известной; незарегистрированная не известна; запись попадает в `entries`; register не открывает; повторная регистрация перезаписывает
+- unlock: возвращает True; помечает открытой; попадает в `unlocked_entries`; повторное открытие → False и без дублей
+- unlocked_entries: пуст пока ничего не открыто; сохраняет порядок открытия; возвращает копию (внешняя мутация безопасна); перечисляет только открытые
+- Безопасность: неизвестный id → False/нет открытия; пустая система; множественные записи независимы
+- События: unlock эмитит `lore_unlocked`; событие несёт entry; повторное открытие эмитит один раз; неизвестный id ничего не эмитит; каждая запись даёт своё событие
+
+### Спринт 8I — Lore Integration ✅ (завершён)
+Цель: связать существующие системы диалогов и лора — диалог открывает существующую запись лора. БЕЗ Lore UI, NPC, глав, сейвов, боссов, новых механик. Прямая аналогия 8G (Quest↔Dialogue).
+- [x] `data/dialogue_data.py` — `DialogueChoice` получил опциональное поле `lore_id` (default `""`); диалог трактует его как opaque-ссылку, о лоре не знает
+- [x] `data/dialogue_loader.py` — `_build_choice` читает `lore_id` через `.get(..., "")` (опционально, обратная совместимость)
+- [x] `assets/data/lore.json` — НОВЫЙ файл с записью `bunker_a1_origin` (формат `{"lore": [{id, title, text, category}]}`)
+- [x] `assets/data/dialogues.json` — у выбора «Thank you» в `ranger_intro` добавлен `"lore_id": "bunker_a1_origin"`; структура узлов сохранена (тесты 8F/8G целы)
+- [x] `ui/game_screen.py` — `self._lore_system = LoreSystem()`, записи грузятся inline `_load_lore_entries()` (как player/weapon/enemy/item) и регистрируются; `_on_dialogue_choice` дополнен открытием лора по `lore_id` (рядом с выдачей квеста, обе ветки независимы)
+- [x] `tests/test_lore_dialogue_integration.py` — 16 тестов
+- [x] Smoke (headless): T → диалог → «I'll help» → «Thank you» → запись `bunker_a1_origin` открыта в LoreSystem
+- [x] Lore UI НЕ создавался; `ui/lore_ui.py` остаётся пустым стабом
+
+### Тесты — 541 тест, все зелёные ✅ (после Спринта 8I)
++16 тестов в `tests/test_lore_dialogue_integration.py`:
+- Разблокировка: выбор с lore_id открывает запись; запись среди открытых; выбор без lore_id ничего не открывает
+- Безопасность: неизвестный lore_id; пустой lore_id; событие без `choice`; повторное открытие не дублирует
+- События: unlock эмитит `lore_unlocked` один раз с entry; повтор не эмитит второй раз; неизвестный id ничего не эмитит
+- Полный сценарий: T → выбор → открытие записи → LoreSystem содержит запись; не ломает update/draw
+- Регрессии: обычный диалог без лора работает; Quest↔Dialogue (8G) не сломан; обычный жизненный цикл квеста; вариант с quest_id+lore_id выполняет обе интеграции
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -402,6 +437,15 @@
 | 2026-06-12 | `choose`/`advance` маршрутизированы через `_select(choice)` → эмит `dialogue_choice_selected` | единая точка эмита для ветвления и линейного шага; терминальный узел (0 choices) не проходит через `_select` → не эмитит; новое событие не ломает существующие проверки порядка (они слушают только started/node_changed/ended) |
 | 2026-06-12 | GameScreen грузит квесты в реестр `_quests` БЕЗ авто-принятия; диалог выдаёт через `accept_quest` | без этого выдача из диалога была бы нет-оп (квест уже ACTIVE); квест появляется в журнале только после диалога — как требует сценарий 8G; ни один тест не завязан на авто-принятие старта |
 | 2026-06-12 | `_on_dialogue_choice` читает quest_id через `getattr(choice, "quest_id", "")`, выдаёт из реестра | безопасно при пустом/неизвестном quest_id (`_quests.get`→None) и повторной выдаче (`accept_quest` нет-оп для не-AVAILABLE); isinstance не нужен — opaque-доступ к данным |
+| 2026-06-12 | Lore: `data/lore_data.py` (`LoreEntry`) + `systems/lore.py` (`LoreSystem`) | прямая аналогия quest/dialogue: слой данных + рантайм-система; обязательный нижний слой по CLAUDE.md (data → systems), не расширение скоупа |
+| 2026-06-12 | `LoreSystem.register` (каталог) отделён от `unlock` (открытие) | «существование записи» и «открытие записи» — разные операции из задачи; unlock неизвестного id → нет-оп; каталог наполняется заранее, открытие — рантайм-событие |
+| 2026-06-12 | `unlock() → bool`, эмит `lore_unlocked` ровно один раз на запись | защита от повторного открытия: второй вызов возвращает False без события; параллель `quest_completed`/`dialogue_*` — система сообщает о состоянии только через EventBus |
+| 2026-06-12 | JSON-загрузчик лора НЕ реализован в 8H | нет потребителей данных (нет Lore UI/триггеров); повторяет инкремент quest/dialogue, где loader делался отдельным спринтом при появлении нужды; задача 8H — только доменная модель + система |
+| 2026-06-12 | `unlocked_entries`/`entries` возвращают копии | внешний код (будущий Lore UI) физически не может мутировать внутреннее состояние; повторяет `QuestSystem.active_quests` |
+| 2026-06-12 | Lore↔Dialogue связан через тот же EventBus `dialogue_choice_selected`, что и Quest↔Dialogue (8G) | новый паттерн не вводится; `_on_dialogue_choice` обрабатывает и `quest_id`, и `lore_id` независимо; LoreSystem владеет лором, DialogueSystem — диалогами, GameScreen — интеграционный слой |
+| 2026-06-12 | `lore_id: str = ""` на `DialogueChoice` (data-driven, не `if node_id ==`) | открываемая запись задаётся в JSON, не хардкодом; диалог трактует id как opaque-данные; минимальное расширение модели по образцу `quest_id` |
+| 2026-06-12 | Лор-записи грузятся inline `GameScreen._load_lore_entries()` из `lore.json`, БЕЗ отдельного `lore_loader.py` | повторяет inline-паттерн player/weapon/enemy/item в GameScreen; интеграция 8I не требует валидирующего загрузчика; отдельный `lore_loader` (как quest/dialogue) — будущий инкремент при появлении Lore UI/триггеров |
+| 2026-06-12 | `_on_dialogue_choice` открывает лор через `getattr(choice, "lore_id", "")` → `lore_system.unlock` | безопасно при пустом/неизвестном lore_id (`unlock` нет-оп → False, без события) и при повторе; ранний `return` убран, чтобы quest_id и lore_id обрабатывались независимо в одном выборе |
 
 ---
 
@@ -452,6 +496,10 @@
 > `Objective.progress` — абстрактное property → str; `KillZombieObjective.progress` отдаёт `"current/target"`. Используется QuestLogUI для отображения без isinstance.
 > `QuestLogUI(quest_system, on_close)` — только чтение; навигация UP/DOWN, ESC закрывает. В GameScreen открывается по клавише J (lazy import), `on_close = state_manager.pop`.
 > `GameScreen._quest_system` — `QuestSystem(player.experience)`. Квесты из `quests.json` грузятся в реестр `GameScreen._quests: dict[str, Quest]` и НЕ принимаются автоматически (Sprint 8G): их выдаёт диалог. Прогресс идёт автоматически через подписку QuestSystem на `entity_died`.
+> `LoreSystem` (8H) — каталог лор-записей и набор открытых. `register(entry)` наполняет каталог; `unlock(entry_id) → bool` открывает (True если новое; нет-оп/False для неизвестного id и повторного открытия); `has_entry`/`is_unlocked` — проверки; `unlocked_entries` (порядок открытия, копия) / `entries` (копия). EventBus-событие `lore_unlocked` ({entry}) эмитится ровно один раз на запись. Без UI/загрузчика/глав — только модель данных (`data/lore_data.py: LoreEntry`) + система.
+> Открытие записок на карте/терминалах → вызвать `lore_system.unlock(id)` из триггера (как `_start_dialogue`). Lore UI и триггеры на карте — следующие спринты; `ui/lore_ui.py` пока пустой стаб.
+> Lore↔Dialogue (8I): выбор варианта с непустым `DialogueChoice.lore_id` → DialogueSystem эмитит `dialogue_choice_selected` ({choice}) → `GameScreen._on_dialogue_choice` → `lore_system.unlock(lore_id)`. Безопасно при пустом/неизвестном id и повторе. Новая запись лора, открываемая диалогом → добавить запись в `lore.json` + `lore_id` в нужный choice в `dialogues.json`.
+> `GameScreen._lore_system` — `LoreSystem`; записи регистрируются из `lore.json` через `_load_lore_entries()` (inline json.load, как player/weapon/enemy/item). Один выбор диалога может нести и `quest_id`, и `lore_id` — обе интеграции независимы.
 > Quest↔Dialogue (8G): выбор варианта с непустым `DialogueChoice.quest_id` → DialogueSystem эмитит `dialogue_choice_selected` ({choice}) → `GameScreen._on_dialogue_choice` → `accept_quest(_quests[quest_id])`. Безопасно при пустом/неизвестном id и повторной выдаче. Новый квест, выдаваемый диалогом → добавить запись в `quests.json` + `quest_id` в нужный choice в `dialogues.json`.
 > EventBus: при гибели врага срабатывают ДВА независимых подписчика — `GameScreen._on_entity_died` (XP за килл) и `QuestSystem._on_entity_died` (прогресс квеста). Не конфликтуют.
 > `data/quest_loader.py` — `load_quests(path: Path) → list[Quest]`. Поднимает `QuestLoadError` при любой ошибке (нет файла / битый JSON / неизвестный тип цели / нет обязательных полей).

@@ -85,8 +85,9 @@ def _build_node(raw: Any, dialogue_id: str) -> DialogueNode:
 def _build_choice(raw: Any, dialogue_id: str, node_id: str) -> DialogueChoice:
     """Построить один DialogueChoice из словаря.
 
-    Требует поле text; next_id и quest_id опциональны. quest_id связывает вариант
-    с выдаваемым квестом (трактуется интеграционным слоем, не загрузчиком).
+    Требует поле text; next_id, quest_id и lore_id опциональны. quest_id связывает
+    вариант с выдаваемым квестом, lore_id — с открываемой записью лора (оба трактуются
+    интеграционным слоем, не загрузчиком).
     """
     if not isinstance(raw, dict) or "text" not in raw:
         raise DialogueLoadError(
@@ -96,6 +97,7 @@ def _build_choice(raw: Any, dialogue_id: str, node_id: str) -> DialogueChoice:
         text=raw["text"],
         next_id=raw.get("next_id", ""),
         quest_id=raw.get("quest_id", ""),
+        lore_id=raw.get("lore_id", ""),
     )
 
 
