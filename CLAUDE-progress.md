@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 8J — Lore UI ✅ (журнал открытых записей лора, клавиша L)  
+**Спринт:** 9A — Inventory UI ✅ (просмотр предметов инвентаря, клавиша I)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -332,6 +332,23 @@
 - Живые данные: новая запись появляется без пересоздания UI; зарегистрированная-но-не-открытая не показывается; UI не хранит собственного списка (`_entries`/`_unlocked` отсутствуют)
 - Интеграция: L открывает LoreUI (depth 2); UI использует тот же `_lore_system`, что GameScreen; ESC возвращает в GameScreen; L нет-оп без state_manager
 
+### Спринт 9A — Inventory UI ✅ (завершён)
+Цель: дать игроку просматривать содержимое инвентаря. По образцу SkillTreeUI / QuestLogUI / LoreUI. БЕЗ stackable-стекинга, drop, drag-and-drop, новых механик.
+- [x] `ui/inventory_ui.py` — `InventoryUI(BaseScreen)`: `__init__(inventory, on_close)`; UP/DOWN циклическая навигация, ESC → `on_close`; читает `inventory.items` напрямую (копия на вызов — не кэширует, не дублирует состояние); рендер заголовка «INVENTORY», строки `count/capacity`, списка имён с выделением, description выбранного предмета (перенос по словам); пустое состояние «Inventory is empty.»
+- [x] `ui/game_screen.py` — клавиша `I` → `InventoryUI(self._player.inventory, ...)` (lazy import, `state_manager.push`, `on_close=state_manager.pop`); нет-оп при `state_manager is None`; повторяет паттерн Tab/J/L/T
+- [x] `tests/test_inventory_ui.py` — 27 тестов
+- [x] Smoke (headless): подбор предмета → I → InventoryUI → навигация → draw → ESC → возврат в GameScreen
+- [x] `Inventory`/`Item` не менялись; UI использует только публичный `items`/`count`/`capacity`/`name`/`description`
+
+### Тесты — 595 тестов, все зелёные ✅ (после Спринта 9A)
++27 тестов в `tests/test_inventory_ui.py`:
+- Инициализация: наследование BaseScreen; начальный индекс 0; пустой инвентарь безопасен; UI не кэширует (видит предмет, добавленный после создания)
+- Навигация: UP/DOWN; циклическая в обе стороны; один предмет; пустой список безопасен; игнор не-KEYDOWN
+- Закрытие: ESC → on_close ровно один раз; навигация не закрывает
+- Отрисовка: пусто / один / несколько; после навигации; длинное описание (перенос); update — нет-оп
+- Живые данные: новый предмет появляется без пересоздания UI; удалённый исчезает; UI не хранит собственного списка (`_items` отсутствует)
+- Интеграция: I открывает InventoryUI (depth 2); UI использует тот же `player.inventory`, что GameScreen; ESC возвращает в GameScreen; I нет-оп без state_manager
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -466,6 +483,9 @@
 | 2026-06-12 | `LoreUI(lore_system, on_close)` читает `unlocked_entries` напрямую в draw/navigation | точная копия `QuestLogUI(quest_system, on_close)`: UI не кэширует и не дублирует состояние; `unlocked_entries` отдаёт копию → UI физически не может мутировать систему; живые данные без пересоздания UI |
 | 2026-06-12 | Клавиша `L` → LoreUI через lazy import в GameScreen | завершает ряд Tab→SkillTreeUI / J→QuestLogUI / T→Dialogue; lazy import исключает циклический импорт; `on_close=state_manager.pop`; нет-оп при `state_manager is None` |
 | 2026-06-12 | Перенос текста записи по словам (`LoreUI._wrap`) — презентационная логика в UI | лор-текст длиннее реплик/описаний; перенос — форматирование отображения, не игровая логика и не модель данных; держит draw читаемым и не роняет на длинном тексте |
+| 2026-06-12 | `InventoryUI(inventory, on_close)` читает `inventory.items` напрямую в draw/navigation | точная копия паттерна LoreUI/QuestLogUI: UI не кэширует и не дублирует список; `items` отдаёт копию → UI физически не может мутировать инвентарь; живые данные без пересоздания UI |
+| 2026-06-12 | Клавиша `I` → InventoryUI через lazy import в GameScreen; передаётся `player.inventory` | завершает ряд Tab/J/L/T; выполняет давнее обещание README (`I` — Инвентарь), которое не было подключено; `state_manager.pop` как on_close; нет-оп при `state_manager is None` |
+| 2026-06-12 | InventoryUI показывает description только для выбранного предмета | список даёт обзор (имена), деталь (description) — для текущего выбора; минимальный осмысленный объём по требованию; stackable/drop/use-from-UI вынесены в будущие спринты |
 
 ---
 
@@ -501,6 +521,7 @@
 > `QuestItem.use(player)` — возвращает False, из инвентаря не удаляется.
 > EventBus-события инвентаря: `inventory_item_added`, `inventory_item_removed`, `item_used`.
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
+> `InventoryUI(inventory, on_close)` — оверлей инвентаря (BaseScreen). Открывается клавишей `I` в GameScreen (lazy import, `on_close=state_manager.pop`). UP/DOWN циклическая навигация, ESC закрывает. Только чтение через `inventory.items` (+ `count`/`capacity`); состояние не дублирует. Пустой → «Inventory is empty.». Показывает имена списком + description выбранного. `ui/inventory_ui.py` больше не стаб.
 > `player.skill_tree` — `SkillTree`. `skill_tree.add_point()` вызывается через EventBus `player_level_up` (по одному разу на каждый level-up). `skill_tree.upgrade(SkillType.X, player)` — тратит 1 очко, применяет эффект. Константы: `HP_PER_LEVEL=20`, `HUNGER_REDUCTION_PER_LEVEL=0.5`, `DAMAGE_PER_LEVEL=5.0`, `MAX_SKILL_LEVEL=5`.
 > `player.apply_weapon_damage_bonus(bonus)` — передаёт бонус в `_weapon.add_damage_bonus()`; no-op если оружие не экипировано.
 > `weapon.damage_bonus` — накопленный бонус к урону от навыков. `Pistol.fire()` создаёт пулю с `config.damage + _damage_bonus`.
