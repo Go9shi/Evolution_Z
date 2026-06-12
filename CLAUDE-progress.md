@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 9D — Boss AI ✅ (преследование, ближняя атака, 2 фазы)  
+**Спринт:** 10A — Save System ✅ (ядро сохранения/загрузки в JSON)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -400,6 +400,27 @@
 - Фазы: HP>50% → фаза 1; ровно 50% → фаза 2; <50% → фаза 2; фаза 2 быстрее; фаза 2 ниже кулдаун; фаза 2 проходит больше за кадр
 - Регрессии: смерть босса; `boss_defeated`; CombatSystem наносит урон; xp_reward=0; стена блокирует движение
 
+### Спринт 10A — Save System ✅ (завершён)
+Цель: минимальное ядро сохранения/загрузки в JSON. БЕЗ меню/слотов/автосейва/версий/миграций/шифрования. Только система + тесты (без интеграции в GameScreen/UI).
+- [x] `data/save_file.py` — `@dataclass SaveData` (player_xp/level, skill_levels, inventory_item_ids, active/completed_quest_ids, unlocked_lore_ids) + `to_dict`/`from_dict` (устойчив к битым/пустым ключам)
+- [x] `systems/save_system.py` — `SaveSystem` + `SaveError`: `capture` (снимок через публичный API), `save` (JSON), `load` (разбор + SaveError при отсутствии файла/битом JSON/не-объекте), `apply` (восстановление), `load_into`
+- [x] `systems/quest_system.py` — НЕОБХОДИМОЕ дополнение: публичный `restore(active, completed)` (нет публичного пути для завершённых квестов; `accept+complete` дважды начислили бы XP/события). Существующее поведение не изменено
+- [x] Восстановление через публичный API: XP — `player.add_xp(total)` (детерминированно воспроизводит уровень + выдаёт очки навыков); навыки — `skill_tree.upgrade` по сохранённым уровням (тратит выданные очки, повторно применяет эффекты); инвентарь — пересборка по `item_id` из `items.json` (food→FoodItem, quest→QuestItem); квесты — `load_quests`+`restore`; лор — `lore_system.unlock(id)`
+- [x] `tests/test_save_system.py` — 25 тестов
+- [x] JSON через `json`, без pickle и сторонних библиотек
+
+### Тесты — 696 тестов, все зелёные ✅ (после Спринта 10A)
++25 тестов в `tests/test_save_system.py`:
+- Save: файл создаётся; JSON валиден; секции player/skills/inventory/quests/lore
+- SaveData: round-trip to_dict/from_dict; пустой dict → дефолты
+- Load/Безопасность: round-trip; отсутствующий файл → SaveError; битый JSON → SaveError; не-объект → SaveError; пустое сохранение `{}` → дефолты; apply пустого безопасен
+- Experience: XP восстановлен; уровень восстановлен (level 3)
+- Skill Tree: уровни навыков восстановлены; эффект (max_health) повторно применён; свободные очки сохранены
+- Inventory: предметы восстановлены по id; тип (FoodItem); неизвестный id пропущен без падения
+- Quest: активные восстановлены; завершённые восстановлены; восстановление НЕ начисляет повторно reward_xp
+- Lore: открытые восстановлены; незарегистрированные/закрытые не восстанавливаются
+- Full round-trip: capture → save → load_into → capture идентичны
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -443,7 +464,8 @@
 - [ ] Логика концовок: хорошая / плохая
 
 ### Спринт 10 — Полировка
-- [ ] `systems/save_system.py` — сохранение / загрузка JSON
+- [x] `systems/save_system.py` — сохранение / загрузка JSON (10A: ядро; без меню/слотов/интеграции)
+- [ ] Интеграция SaveSystem в GameScreen (F5/F9, слоты, меню) — будущий спринт
 - [ ] `ui/main_menu.py` — главное меню со слотами сохранений
 - [ ] `systems/audio.py` — SFX и музыка
 - [ ] HUD: HP-бар (через `player.health.percentage`), миникарта, трекер квестов
@@ -553,6 +575,12 @@
 | 2026-06-12 | Константы AI босса — в settings.py, без новых JSON | прецедент `BOSS_MAX_HEALTH` (9C); сприн запрещает новые JSON-конфиги; CLAUDE.md: константы — в settings; значения функциональные, не балансировка |
 | 2026-06-12 | 2 фазы как property `phase` + производные `speed`/`attack_cooldown` (множители фазы 2) | минимально и без состояния перехода: фаза вычисляется из `health.percentage` на лету; фаза 2 (HP<=50%) даёт ×1.5 скорость и ×0.6 кулдаун — «агрессивнее» одной формулой |
 | 2026-06-12 | Melee босса НЕ эмитит `zombie_attacked` | новых событий вводить нельзя, а зомби-событие от босса семантически некорректно и без продакшн-подписчиков; требование — лишь урон, выполняется `target.take_damage(BOSS_DAMAGE)` |
+| 2026-06-12 | `SaveData` (data/) + `SaveSystem` (systems/): capture/save/load/apply | разделение модель↔оркестрация как у quest/dialogue (data + loader/system); сохраняем только состояние (id/числа), не игровые объекты |
+| 2026-06-12 | Восстановление навыков через `add_xp`→очки→`upgrade`, без сеттеров | у SkillTree нет публичного сеттера уровней; `player.add_xp` через `player_level_up` сам выдаёт (level−1) очков, которые `upgrade` тратит по сохранённым уровням (и повторно применяет эффекты). Чисто публичный API, инвариант level−1 ≥ Σуровней держится для валидных сейвов |
+| 2026-06-12 | Восстановление XP через `add_xp(total_xp)` | `ExperienceComponent` хранит суммарный XP и выводит уровень формулой; повтор `add_xp(total)` на свежем компоненте детерминированно воспроизводит и XP, и уровень — сеттеры не нужны |
+| 2026-06-12 | Добавлен публичный `QuestSystem.restore(active, completed)` (необходимо) | нет публичного пути восстановить ЗАВЕРШЁННЫЕ квесты; `accept_quest`+`complete_quest` повторно начислили бы reward_xp и эмитили `quest_completed`. `restore` ставит статусы и списки без наград/событий; обычный поток её не вызывает |
+| 2026-06-12 | Предметы восстанавливаются по `item_id` из `items.json` (food→FoodItem, quest→QuestItem) | сохраняем минимум (item_id); пересборка повторяет категории `GameScreen._spawn_items`; неизвестный id пропускается. `systems→entities` уже легитимен (combat импортирует bullet) |
+| 2026-06-12 | Лор восстанавливается `lore_system.unlock(id)` (каталог уже зарегистрирован) | LoreSystem-дизайн: каталог регистрируется отдельно, открытие — по id; SaveSystem лишь открывает сохранённые id; незарегистрированные — нет-оп |
 
 ---
 
@@ -590,6 +618,7 @@
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
 > `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `xp_reward=0` (9C), `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}).
 > Босс интегрирован в GameScreen (9C): `_boss` спавнится в Комнате 4 (HP=`settings.BOSS_MAX_HEALTH`), обновляется/рисуется при `active`, входит в combat-`targets`. Подписка `boss_defeated` → `_on_boss_defeated` → `_victory=True`; `GameScreen.victory` (read-only) + победный текст в draw. Босс даёт 0 XP. ВНИМАНИЕ: босс — faction='enemy', поэтому его смерть инкрементит активные KillZombieObjective (generic-фильтр QuestSystem) — будущая балансировка/раздельные цели.
+> SaveSystem (10A): `SaveSystem().save(path, player, quest_system, lore_system)` / `.load(path)→SaveData` / `.apply(data, ...)` / `.load_into(path, ...)`. `SaveError` при отсутствии файла/битом JSON. `SaveData` (data/save_file.py) — снимок: xp/level, skill_levels, inventory_item_ids, active/completed_quest_ids, unlocked_lore_ids; `to_dict`/`from_dict`. ВАЖНО: `apply` рассчитан на СВЕЖИЕ системы; XP восстанавливается первым (выдаёт очки навыков). Завершённые квесты — через новый `QuestSystem.restore` (без повторного XP). Лор-каталог должен быть зарегистрирован до apply. НЕ интегрирован в GameScreen/клавиши — будущий спринт. Активные квесты восстанавливаются на уровне id (прогресс целей не сохраняется — минимальный срез).
 > Boss AI (9D): `boss.update(dt, walls, player)` — преследует игрока в радиусе `BOSS_DETECTION_RANGE` (`_move_toward`, как зомби) и бьёт в радиусе `BOSS_ATTACK_RANGE` по кулдауну `attack_cooldown`. GameScreen зовёт `self._boss.update(dt, walls, self._player)` (НЕ `update(dt)`). Фазы: `boss.phase` (1/2 от `health.percentage`, порог `BOSS_PHASE2_HEALTH_FRACTION`); `boss.speed`/`boss.attack_cooldown` зависят от фазы (фаза 2 = ×`SPEED_MULTIPLIER` / ×`COOLDOWN_MULTIPLIER`). `can_attack` по `_attack_timer`. Все константы — в settings.py. Melee не эмитит событий.
 > `InventoryUI(inventory, on_close)` — оверлей инвентаря (BaseScreen). Открывается клавишей `I` в GameScreen (lazy import, `on_close=state_manager.pop`). UP/DOWN циклическая навигация, ESC закрывает. Только чтение через `inventory.items` (+ `count`/`capacity`); состояние не дублирует. Пустой → «Inventory is empty.». Показывает имена списком + description выбранного. `ui/inventory_ui.py` больше не стаб.
 > `player.skill_tree` — `SkillTree`. `skill_tree.add_point()` вызывается через EventBus `player_level_up` (по одному разу на каждый level-up). `skill_tree.upgrade(SkillType.X, player)` — тратит 1 очко, применяет эффект. Константы: `HP_PER_LEVEL=20`, `HUNGER_REDUCTION_PER_LEVEL=0.5`, `DAMAGE_PER_LEVEL=5.0`, `MAX_SKILL_LEVEL=5`.

@@ -46,6 +46,22 @@ class QuestSystem:
             return
         self._finalize(quest)
 
+    def restore(self, active: list[Quest], completed: list[Quest]) -> None:
+        """Восстановить состояние квестов из сохранения.
+
+        Заменяет текущие списки активных/завершённых. НЕ выдаёт XP и НЕ эмитит события
+        (в отличие от accept_quest/complete_quest) — награды уже были получены в сейве.
+        Используется SaveSystem; обычный игровой поток её не вызывает.
+        """
+        self._active = []
+        self._completed = []
+        for quest in active:
+            quest.status = QuestStatus.ACTIVE
+            self._active.append(quest)
+        for quest in completed:
+            quest.status = QuestStatus.COMPLETED
+            self._completed.append(quest)
+
     def _on_entity_died(self, data: dict) -> None:
         self.update_progress(data)
 
