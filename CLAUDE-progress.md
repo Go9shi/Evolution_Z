@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 9A — Inventory UI ✅ (просмотр предметов инвентаря, клавиша I)  
+**Спринт:** 9B — Patient Zero Boss Core ✅ (сущность босса: HP, faction, урон, смерть, boss_defeated)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -349,6 +349,22 @@
 - Живые данные: новый предмет появляется без пересоздания UI; удалённый исчезает; UI не хранит собственного списка (`_items` отсутствует)
 - Интеграция: I открывает InventoryUI (depth 2); UI использует тот же `player.inventory`, что GameScreen; ESC возвращает в GameScreen; I нет-оп без state_manager
 
+### Спринт 9B — Patient Zero Boss Core ✅ (завершён)
+Цель: ядро сущности финального босса. ТОЛЬКО ядро — БЕЗ фаз, спец-атак, кислоты, призыва, AI, анимаций, звука, UI/HP-бара экрана, сейвов, сюжета. Без новых систем и BossManager.
+- [x] `entities/boss.py` — иерархия `Entity → Boss → PatientZeroBoss` (как в CLAUDE.md/README). `Boss(Entity)`: faction='enemy', `_rect` + property `rect`, `draw` (прямоугольник + HP-бар, паттерн `Zombie.draw`), override `take_damage` → эмит `boss_defeated` строго на переходе жив→мёртв. `PatientZeroBoss(Boss)`: own max_health (инжектится в конструктор), размер `TILE_SIZE*2` из settings (не магия)
+- [x] Death-паттерн врага сохранён: `Entity.take_damage` по-прежнему клампит HP (через HealthComponent), снимает `active` и эмитит `entity_died`; `boss_defeated` — boss-специфичная надстройка, не новая событийная архитектура
+- [x] Совместимость с `CombatSystem` (Targetable: active/pos/faction/rect/take_damage) — пуля игрока бьёт босса существующим способом; faction-фильтр не даёт врагам бить босса
+- [x] `tests/test_boss.py` — 29 тестов
+- [x] Существующие системы (Quest/Dialogue/Lore/Inventory/UI/combat/entity) НЕ менялись
+
+### Тесты — 624 теста, все зелёные ✅ (после Спринта 9B)
++29 тестов в `tests/test_boss.py`:
+- Создание: тип; наследование Boss/Entity; faction='enemy'; own max_health; полное HP на старте; жив; активен; rect (центр + размер TILE_SIZE*2)
+- Получение урона: снижение HP; накопление нескольких попаданий; HP не ниже 0 (избыточный урон); не-летальный урон оставляет жив+активным
+- Смерть: деактивация; смерть от точного урона; смерть от избыточного; жив при уроне на 1 ниже летального
+- EventBus: `boss_defeated` эмитится при смерти; данные содержат `{boss}`; не эмитится при не-летальном; ровно один раз при повторных/избыточных ударах; `entity_died` тоже эмитится (совместимость)
+- Интеграция: пуля игрока ранит босса через CombatSystem; вражеская пуля не бьёт (faction-фильтр); combat убивает босса и эмитит событие; мёртвый босс игнорируется combat; `heal` следует Entity-паттерну
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -383,7 +399,8 @@
 - Integration: полный проход с ветвлением и порядком событий; перезапуск после end
 
 ### Спринт 9 — Финальный босс
-- [ ] `entities/boss.py` — базовый `Boss(Entity)` + `PatientZeroBoss` (3 фазы)
+- [x] `entities/boss.py` — базовый `Boss(Entity)` + `PatientZeroBoss` — **ядро** (9B): HP, faction, урон, смерть, `boss_defeated`
+- [ ] Расширение `PatientZeroBoss` — 3 фазы, спец-атаки, призыв врагов (будущий спринт)
 - [ ] `assets/maps/eden7.tmx` — арена финального боя
 - [ ] Логика концовок: хорошая / плохая
 
@@ -486,6 +503,9 @@
 | 2026-06-12 | `InventoryUI(inventory, on_close)` читает `inventory.items` напрямую в draw/navigation | точная копия паттерна LoreUI/QuestLogUI: UI не кэширует и не дублирует список; `items` отдаёт копию → UI физически не может мутировать инвентарь; живые данные без пересоздания UI |
 | 2026-06-12 | Клавиша `I` → InventoryUI через lazy import в GameScreen; передаётся `player.inventory` | завершает ряд Tab/J/L/T; выполняет давнее обещание README (`I` — Инвентарь), которое не было подключено; `state_manager.pop` как on_close; нет-оп при `state_manager is None` |
 | 2026-06-12 | InventoryUI показывает description только для выбранного предмета | список даёт обзор (имена), деталь (description) — для текущего выбора; минимальный осмысленный объём по требованию; stackable/drop/use-from-UI вынесены в будущие спринты |
+| 2026-06-12 | Иерархия `Entity → Boss → PatientZeroBoss` (Boss — отдельная ветвь, не под Zombie) | строго по CLAUDE.md/README; демонстрация наследования (цель ООП-проекта); `Boss` базовый держит общую boss-логику (rect, boss_defeated), `PatientZeroBoss` — конкретный финальный |
+| 2026-06-12 | `boss_defeated` эмитится в override `Boss.take_damage` на переходе жив→мёртв | переиспользует единственную точку детекции смерти (Entity.take_damage), не вводит новую событийную архитектуру; `was_alive and not is_alive` гарантирует ровно одно событие при повторных/избыточных ударах; `entity_died` остаётся (death-паттерн врагов) |
+| 2026-06-12 | `PatientZeroBoss(x, y, max_health)` — max_health инжектится, размер `TILE_SIZE*2` | без магических чисел: HP задаёт вызывающий (позже из JSON), размер — из settings; ядро не создаёт BossData/JSON-загрузчик (вне скоупа 9B, как loader откладывался у quest/lore) |
 
 ---
 
@@ -521,6 +541,7 @@
 > `QuestItem.use(player)` — возвращает False, из инвентаря не удаляется.
 > EventBus-события инвентаря: `inventory_item_added`, `inventory_item_removed`, `item_used`.
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
+> `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}). НЕ интегрирован в GameScreen (нет спавна/арены) — это будущий спринт. Фазы/спец-атаки/призыв — тоже будущее.
 > `InventoryUI(inventory, on_close)` — оверлей инвентаря (BaseScreen). Открывается клавишей `I` в GameScreen (lazy import, `on_close=state_manager.pop`). UP/DOWN циклическая навигация, ESC закрывает. Только чтение через `inventory.items` (+ `count`/`capacity`); состояние не дублирует. Пустой → «Inventory is empty.». Показывает имена списком + description выбранного. `ui/inventory_ui.py` больше не стаб.
 > `player.skill_tree` — `SkillTree`. `skill_tree.add_point()` вызывается через EventBus `player_level_up` (по одному разу на каждый level-up). `skill_tree.upgrade(SkillType.X, player)` — тратит 1 очко, применяет эффект. Константы: `HP_PER_LEVEL=20`, `HUNGER_REDUCTION_PER_LEVEL=0.5`, `DAMAGE_PER_LEVEL=5.0`, `MAX_SKILL_LEVEL=5`.
 > `player.apply_weapon_damage_bonus(bonus)` — передаёт бонус в `_weapon.add_damage_bonus()`; no-op если оружие не экипировано.
