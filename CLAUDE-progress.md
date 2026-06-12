@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 9C — Boss Integration ✅ (босс в игровом цикле; победа по boss_defeated)  
+**Спринт:** 9D — Boss AI ✅ (преследование, ближняя атака, 2 фазы)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -382,6 +382,24 @@
 - Победа: смерть эмитит `boss_defeated` ({boss}); GameScreen ставит `victory`; победа через combat-путь; не ломает update/draw; мёртвый босс не рисуется/обновляется
 - Регрессии: зомби по-прежнему спавнятся; убийство зомби даёт XP; босс даёт 0 XP (без падения `_on_entity_died`); мёртвые зомби пруна­тся; системы на месте; диалог по `T` открывается
 
+### Спринт 9D — Boss AI ✅ (завершён)
+Цель: минимальный AI босса — преследование, ближняя атака, 2 фазы. БЕЗ спец-атак/кислоты/призыва/новых пуль/событий/экранов/JSON/сейвов.
+- [x] `settings.py` — константы AI босса: `BOSS_SPEED/DETECTION_RANGE/ATTACK_RANGE/ATTACK_COOLDOWN/DAMAGE` + фаза 2: `BOSS_PHASE2_HEALTH_FRACTION/SPEED_MULTIPLIER/COOLDOWN_MULTIPLIER` (функциональные значения, не балансировка; новых JSON нет)
+- [x] `entities/boss.py` — `PatientZeroBoss` получил AI, зеркалящий зомби: `update(dt, walls, player)` (сигнатура как `Zombie.update`) → преследование `_move_toward` в радиусе обнаружения / ближняя атака `attack` по кулдауну. Хелперы `_detect_player/_in_attack_range/_move_toward/_resolve_x/_resolve_y` — копия подхода Zombie (Zombie не рефакторился: Boss — отдельная ветвь `Entity→Boss`)
+- [x] `entities/boss.py` — 2 фазы: property `phase` (1 при HP>50%, 2 при <=50%), `speed`/`attack_cooldown` зависят от фазы (фаза 2 быстрее и чаще), `can_attack`/`_attack_timer`
+- [x] `ui/game_screen.py` — единственная правка: `self._boss.update(dt, walls, self._player)` (раньше `update(dt)`) — босс теперь нуждается в walls+player для преследования
+- [x] Melee БЕЗ нового события (`zombie_attacked` — событие зомби, у босса не эмитится); урон — через `target.take_damage` (HealthComponent игрока)
+- [x] `tests/test_boss_ai.py` — 26 тестов
+- [x] Smoke (headless): фаза 1 (speed 90, cd 1.2) → преследование → атака (hp 100→60) → урон до <=50% → фаза 2 (speed 135, cd 0.72)
+
+### Тесты — 671 тест, все зелёные ✅ (после Спринта 9D)
++26 тестов в `tests/test_boss_ai.py`:
+- Создание: старт в фазе 1; speed=`BOSS_SPEED`; cooldown=`BOSS_ATTACK_COOLDOWN`; can_attack=True
+- Преследование: движение к игроку; верное направление; несколько кадров сокращают дистанцию; не движется вне радиуса обнаружения; player=None безопасен
+- Ближняя атака: урон игроку в радиусе (`BOSS_DAMAGE`); `attack` напрямую; кулдаун блокирует повтор; can_attack=False после атаки; атака снова после кулдауна; нет атаки вне радиуса
+- Фазы: HP>50% → фаза 1; ровно 50% → фаза 2; <50% → фаза 2; фаза 2 быстрее; фаза 2 ниже кулдаун; фаза 2 проходит больше за кадр
+- Регрессии: смерть босса; `boss_defeated`; CombatSystem наносит урон; xp_reward=0; стена блокирует движение
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -418,7 +436,8 @@
 ### Спринт 9 — Финальный босс
 - [x] `entities/boss.py` — базовый `Boss(Entity)` + `PatientZeroBoss` — **ядро** (9B): HP, faction, урон, смерть, `boss_defeated`
 - [x] Интеграция босса в GameScreen (9C): спавн в Комнате 4, combat/урон/смерть, победное состояние по `boss_defeated`
-- [ ] Расширение `PatientZeroBoss` — 3 фазы, спец-атаки, призыв врагов, AI (будущий спринт)
+- [x] AI босса (9D): преследование игрока, ближняя атака по кулдауну, 2 фазы (HP<=50% → быстрее + ниже кулдаун)
+- [ ] Расширение `PatientZeroBoss` — спец-атаки, призыв врагов, патруль вне боя (будущий спринт)
 - [ ] Экран/катсцена победы, концовки (хорошая/плохая) — будущий спринт
 - [ ] `assets/maps/eden7.tmx` — арена финального боя
 - [ ] Логика концовок: хорошая / плохая
@@ -529,6 +548,11 @@
 | 2026-06-12 | `Boss.xp_reward = 0` добавлен в 9C (необходимое изменение) | босс faction='enemy' проходит через существующий `_on_entity_died`, который читает `entity.xp_reward`; без поля — AttributeError при интеграции; решение завершает enemy-контракт (как `Zombie.xp_reward`), оставляя generic XP-обработчик GameScreen неизменным → «XP за зомби не ломается» гарантировано |
 | 2026-06-12 | `BOSS_MAX_HEALTH` в settings.py, координаты спавна инлайн в `_spawn_boss` | CLAUDE.md: константы — в settings; позиции врагов уже инлайн в `_spawn_enemies` — босс следует тому же паттерну; босс-JSON/загрузчик не вводятся (минимальный срез, без новой архитектуры) |
 | 2026-06-12 | Победа = флаг `_victory` + текст в `GameScreen.draw`, без нового экрана | требование «минимальный вертикальный срез, без VictoryScreen»; реакция на существующее `boss_defeated` через EventBus (паттерн `entity_died`→`_on_entity_died`); read-only `victory` property для тестов/будущих концовок |
+| 2026-06-12 | AI босса (9D) — копия подхода Zombie в `PatientZeroBoss`, а не наследование/рефактор Zombie | иерархия `Entity→Boss→PatientZeroBoss` фиксирована (CLAUDE.md); наследование от Zombie нарушило бы её и требовало EnemyData; вынос хелперов в общий базовый класс = рефактор несвязанного Zombie (запрещён). Минимум — зеркало `_move_toward/_resolve_x/_resolve_y/_detect_player/_in_attack_range` |
+| 2026-06-12 | `PatientZeroBoss.update(dt, walls=None, player=None)` — сигнатура как `Zombie.update` | LSP-совместимо с `GameObject.update(dt)` (доп. параметры с дефолтами), mypy чист (как у Zombie); GameScreen зовёт `boss.update(dt, walls, player)` единообразно с врагами |
+| 2026-06-12 | Константы AI босса — в settings.py, без новых JSON | прецедент `BOSS_MAX_HEALTH` (9C); сприн запрещает новые JSON-конфиги; CLAUDE.md: константы — в settings; значения функциональные, не балансировка |
+| 2026-06-12 | 2 фазы как property `phase` + производные `speed`/`attack_cooldown` (множители фазы 2) | минимально и без состояния перехода: фаза вычисляется из `health.percentage` на лету; фаза 2 (HP<=50%) даёт ×1.5 скорость и ×0.6 кулдаун — «агрессивнее» одной формулой |
+| 2026-06-12 | Melee босса НЕ эмитит `zombie_attacked` | новых событий вводить нельзя, а зомби-событие от босса семантически некорректно и без продакшн-подписчиков; требование — лишь урон, выполняется `target.take_damage(BOSS_DAMAGE)` |
 
 ---
 
@@ -566,6 +590,7 @@
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
 > `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `xp_reward=0` (9C), `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}).
 > Босс интегрирован в GameScreen (9C): `_boss` спавнится в Комнате 4 (HP=`settings.BOSS_MAX_HEALTH`), обновляется/рисуется при `active`, входит в combat-`targets`. Подписка `boss_defeated` → `_on_boss_defeated` → `_victory=True`; `GameScreen.victory` (read-only) + победный текст в draw. Босс даёт 0 XP. ВНИМАНИЕ: босс — faction='enemy', поэтому его смерть инкрементит активные KillZombieObjective (generic-фильтр QuestSystem) — будущая балансировка/раздельные цели.
+> Boss AI (9D): `boss.update(dt, walls, player)` — преследует игрока в радиусе `BOSS_DETECTION_RANGE` (`_move_toward`, как зомби) и бьёт в радиусе `BOSS_ATTACK_RANGE` по кулдауну `attack_cooldown`. GameScreen зовёт `self._boss.update(dt, walls, self._player)` (НЕ `update(dt)`). Фазы: `boss.phase` (1/2 от `health.percentage`, порог `BOSS_PHASE2_HEALTH_FRACTION`); `boss.speed`/`boss.attack_cooldown` зависят от фазы (фаза 2 = ×`SPEED_MULTIPLIER` / ×`COOLDOWN_MULTIPLIER`). `can_attack` по `_attack_timer`. Все константы — в settings.py. Melee не эмитит событий.
 > `InventoryUI(inventory, on_close)` — оверлей инвентаря (BaseScreen). Открывается клавишей `I` в GameScreen (lazy import, `on_close=state_manager.pop`). UP/DOWN циклическая навигация, ESC закрывает. Только чтение через `inventory.items` (+ `count`/`capacity`); состояние не дублирует. Пустой → «Inventory is empty.». Показывает имена списком + description выбранного. `ui/inventory_ui.py` больше не стаб.
 > `player.skill_tree` — `SkillTree`. `skill_tree.add_point()` вызывается через EventBus `player_level_up` (по одному разу на каждый level-up). `skill_tree.upgrade(SkillType.X, player)` — тратит 1 очко, применяет эффект. Константы: `HP_PER_LEVEL=20`, `HUNGER_REDUCTION_PER_LEVEL=0.5`, `DAMAGE_PER_LEVEL=5.0`, `MAX_SKILL_LEVEL=5`.
 > `player.apply_weapon_damage_bonus(bonus)` — передаёт бонус в `_weapon.add_damage_bonus()`; no-op если оружие не экипировано.

@@ -17,6 +17,16 @@ SAVES_DIR: Path = BASE_DIR / "saves"
 
 # Босс
 BOSS_MAX_HEALTH: int = 600
+# AI босса (Sprint 9D). Минимальные функциональные значения, не балансировка.
+BOSS_SPEED: float = 90.0
+BOSS_DETECTION_RANGE: float = 400.0
+BOSS_ATTACK_RANGE: float = 70.0
+BOSS_ATTACK_COOLDOWN: float = 1.2
+BOSS_DAMAGE: float = 20.0
+# Фаза 2 (агрессивная) при HP <= доли от максимума: быстрее и чаще бьёт.
+BOSS_PHASE2_HEALTH_FRACTION: float = 0.5
+BOSS_PHASE2_SPEED_MULTIPLIER: float = 1.5
+BOSS_PHASE2_COOLDOWN_MULTIPLIER: float = 0.6
 
 # Тайлы
 TILE_SIZE: int = 32

@@ -121,7 +121,7 @@ class GameScreen(BaseScreen):
         self._enemies = [e for e in self._enemies if e.active]
 
         if self._boss.active:
-            self._boss.update(dt)
+            self._boss.update(dt, walls, self._player)
 
         self._combat.update(dt, walls, [*self._enemies, self._player, self._boss])
 

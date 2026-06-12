@@ -3,7 +3,17 @@ from __future__ import annotations
 import pygame
 
 from core.entity import Entity
-from settings import TILE_SIZE
+from settings import (
+    BOSS_ATTACK_COOLDOWN,
+    BOSS_ATTACK_RANGE,
+    BOSS_DAMAGE,
+    BOSS_DETECTION_RANGE,
+    BOSS_PHASE2_COOLDOWN_MULTIPLIER,
+    BOSS_PHASE2_HEALTH_FRACTION,
+    BOSS_PHASE2_SPEED_MULTIPLIER,
+    BOSS_SPEED,
+    TILE_SIZE,
+)
 from systems.event_bus import EventBus
 
 
@@ -57,11 +67,11 @@ class Boss(Entity):
 
 
 class PatientZeroBoss(Boss):
-    """Носитель Ноль — финальный босс (ядро).
+    """Носитель Ноль — финальный босс.
 
-    Реализует только базовую сущность: own max health, faction='enemy', rect, получение
-    урона и смерть с событием `boss_defeated`. Расширенные механики (фазы, призыв врагов,
-    спец-атаки, кислота) — отдельные будущие спринты.
+    Минимальный AI (Sprint 9D), зеркалит подход зомби: преследование игрока в радиусе
+    обнаружения и ближняя атака по кулдауну. Две фазы — при HP <= 50% (фаза 2) босс
+    быстрее и бьёт чаще. Спец-атаки/кислота/призыв врагов — будущие спринты.
     """
 
     COLOR = (150, 20, 90)
@@ -69,3 +79,106 @@ class PatientZeroBoss(Boss):
 
     def __init__(self, x: float, y: float, max_health: int) -> None:
         super().__init__(x, y, max_health, self._SIZE, self._SIZE)
+        self._attack_timer: float = 0.0
+
+    # ── фазы ───────────────────────────────────────────────────────────────
+
+    @property
+    def phase(self) -> int:
+        """Текущая фаза: 1 при HP > 50%, 2 (агрессивная) при HP <= 50%."""
+        return 2 if self.health.percentage <= BOSS_PHASE2_HEALTH_FRACTION else 1
+
+    @property
+    def speed(self) -> float:
+        """Текущая скорость движения; в фазе 2 выше."""
+        multiplier = BOSS_PHASE2_SPEED_MULTIPLIER if self.phase == 2 else 1.0
+        return BOSS_SPEED * multiplier
+
+    @property
+    def attack_cooldown(self) -> float:
+        """Текущий кулдаун атаки; в фазе 2 ниже (бьёт чаще)."""
+        multiplier = BOSS_PHASE2_COOLDOWN_MULTIPLIER if self.phase == 2 else 1.0
+        return BOSS_ATTACK_COOLDOWN * multiplier
+
+    @property
+    def can_attack(self) -> bool:
+        """Готов ли босс к атаке (кулдаун истёк)."""
+        return self._attack_timer <= 0.0
+
+    # ── AI (структура как у Zombie.update_ai) ──────────────────────────────
+
+    def update(
+        self,
+        dt: float,
+        walls: list[pygame.Rect] | None = None,
+        player: Entity | None = None,
+    ) -> None:
+        """Тик AI: декремент кулдауна, затем преследование / ближняя атака.
+
+        Сигнатура совпадает с `Zombie.update` (walls/player опциональны), поэтому
+        вызывается как обычный враг: `boss.update(dt, walls, player)`.
+        """
+        self._attack_timer = max(0.0, self._attack_timer - dt)
+        if player is None:
+            return
+
+        player_pos = player.pos
+        if self._in_attack_range(player_pos):
+            if self.can_attack:
+                self.attack(player)
+                self._attack_timer = self.attack_cooldown
+        elif self._detect_player(player_pos):
+            self._move_toward(player_pos, walls or [], dt)
+
+    def attack(self, target: Entity) -> None:
+        """Ближняя атака: урон по цели через её HealthComponent (как melee-зомби)."""
+        target.take_damage(BOSS_DAMAGE)
+
+    # ── вспомогательные (зеркало Zombie) ───────────────────────────────────
+
+    def _detect_player(self, player_pos: pygame.Vector2) -> bool:
+        """True, если игрок в радиусе обнаружения."""
+        return self.pos.distance_to(player_pos) <= BOSS_DETECTION_RANGE
+
+    def _in_attack_range(self, player_pos: pygame.Vector2) -> bool:
+        """True, если игрок достижим для ближней атаки."""
+        return self.pos.distance_to(player_pos) <= BOSS_ATTACK_RANGE
+
+    def _move_toward(
+        self, target_pos: pygame.Vector2, walls: list[pygame.Rect], dt: float
+    ) -> None:
+        """Движение к target_pos с AABB-коллизиями стен (как Zombie._move_toward)."""
+        direction = target_pos - self.pos
+        if direction.length_squared() == 0:
+            return
+        direction.normalize_ip()
+        speed = self.speed * dt
+
+        self.pos.x += direction.x * speed
+        self._rect.centerx = int(self.pos.x)
+        self._resolve_x(walls)
+
+        self.pos.y += direction.y * speed
+        self._rect.centery = int(self.pos.y)
+        self._resolve_y(walls)
+
+        self.pos.x = float(self._rect.centerx)
+        self.pos.y = float(self._rect.centery)
+
+    def _resolve_x(self, walls: list[pygame.Rect]) -> None:
+        for wall in walls:
+            if self._rect.colliderect(wall):
+                if self._rect.centerx > wall.centerx:
+                    self._rect.left = wall.right
+                else:
+                    self._rect.right = wall.left
+                self.pos.x = float(self._rect.centerx)
+
+    def _resolve_y(self, walls: list[pygame.Rect]) -> None:
+        for wall in walls:
+            if self._rect.colliderect(wall):
+                if self._rect.centery > wall.centery:
+                    self._rect.top = wall.bottom
+                else:
+                    self._rect.bottom = wall.top
+                self.pos.y = float(self._rect.centery)
