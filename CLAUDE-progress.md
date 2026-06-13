@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 10B — Save Integration ✅ (F5 сохранить / F9 загрузить в GameScreen)  
+**Спринт:** 10C — HUD ✅ (постоянный оверлей: HP / голод / уровень-XP / трекер квестов)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -437,6 +437,20 @@
 - Интеграция: восстановлены XP/уровень, навыки, инвентарь, квесты, лор; игра продолжает работать после загрузки
 - Безопасность: отсутствующий / битый / не-объект файл → нет-оп, состояние не тронуто (тот же объект игрока)
 
+### Спринт 10C — HUD ✅ (завершён)
+Цель: постоянный игровой оверлей поверх GameScreen для уже существующих систем. Чистый UI-слой, без игрового состояния. БЕЗ миникарты/HP-бара босса/меню/экрана победы.
+- [x] `ui/hud.py` — `HUD`: `__init__()` (только шрифты), `draw(surface, player, quest_system)`; НЕ BaseScreen, не в GameStateManager, не хранит игровых данных — читает аргументы каждый кадр
+- [x] Отображение: HP-бар + `current/maximum` (`player.health.percentage`), бар голода (`player.hunger.percentage`), уровень + XP-бар (`experience.current_level/current_xp/xp_to_next_level`), трекер активных квестов (`quest_system.active_quests` → `title` + `objective.progress`); пусто квестов → ничего
+- [x] `ui/game_screen.py` — `self._hud = HUD()` в `__init__`; `self._hud.draw(surface, self._player, self._quest_system)` в конце `draw` (перед victory-текстом). Поля передаются аргументами → подмена при F9 безопасна
+- [x] UI-константы (размеры/цвета баров) — module-level приватные в `hud.py` (паттерн `lore_ui`/`inventory_ui`), не settings
+- [x] `tests/test_hud.py` — 12 тестов
+- [x] Smoke (headless): урон+XP+квест → `GameScreen.draw` рисует HUD; после F5/F9 HUD тот же экземпляр, рисует новые объекты
+
+### Тесты — 722 теста, все зелёные ✅ (после Спринта 10C)
++12 тестов в `tests/test_hud.py`:
+- HUD: создание; draw на пустом состоянии (нет квестов); полный HP; низкий HP; голод 0; несколько активных квестов; после изменения состояния игрока; HUD не хранит игровых полей (`_player`/`_quest_system` отсутствуют)
+- Интеграция: `GameScreen` владеет HUD; `GameScreen.draw` с HUD не падает; один HUD рисует двух разных игроков (читает аргументы); после F9 HUD — тот же экземпляр, рисует новые player/quest_system без падения
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -485,7 +499,8 @@
 - [ ] Слоты сохранений, меню сохранений — будущий спринт
 - [ ] `ui/main_menu.py` — главное меню со слотами сохранений
 - [ ] `systems/audio.py` — SFX и музыка
-- [ ] HUD: HP-бар (через `player.health.percentage`), миникарта, трекер квестов
+- [x] HUD (10C): HP-бар, бар голода, уровень/XP, трекер квестов (`ui/hud.py`); миникарта — отложена
+- [ ] Миникарта (отдельный спринт)
 - [ ] Финальное тестирование прохождения 25–35 мин
 
 ---
@@ -601,6 +616,10 @@
 | 2026-06-12 | Save Integration: F5/F9 в GameScreen, один файл `SAVES_DIR/savegame.json` | клавиши были свободны; единый файл по ТЗ (без слотов/меню); `_SAVE_PATH` — класс-атрибут для тестируемости (monkeypatch) |
 | 2026-06-12 | F9 строит свежие player/quest/lore (`_fresh_systems`) и подменяет ссылки | `SaveSystem.apply` (10A) рассчитан на чистые объекты (add_xp/add_item/upgrade аккумулируют); загрузка в живые объекты двоила бы состояние. Поля систем читаются каждый кадр → swap корректен; restore-логика не дублируется (переиспользован apply) |
 | 2026-06-12 | F9 на отсутствующем/битом файле — нет-оп (ловим SaveError до подмены) | игра не должна ломаться; свежие системы строятся только после успешного `load`; при ошибке текущее состояние сохраняется нетронутым |
+| 2026-06-14 | HUD — обычный класс (не BaseScreen), не в GameStateManager | HUD не экран стека, а постоянный оверлей поверх GameScreen; рисуется напрямую в `GameScreen.draw` (как `_draw_victory`); чистый UI без игрового состояния |
+| 2026-06-14 | HUD читает `player`/`quest_system` аргументами `draw` каждый кадр, не хранит ссылок | F9 подменяет `GameScreen._player/_quest_system`; передача полей аргументами гарантирует, что HUD всегда показывает актуальные объекты без устаревших ссылок |
+| 2026-06-14 | XP-бар = `current_xp / (current_xp + xp_to_next_level)` | используется только разрешённый публичный API (3 поля); знаменатель = порог следующего уровня, всегда > 0; монотонная доля 0..1 без доступа к нижнему порогу уровня |
+| 2026-06-14 | HUD-константы (размеры/цвета баров) — module-level приватные в `hud.py` | повторяет паттерн `lore_ui`/`inventory_ui`/`dialogue_ui` (presentation-константы локальны в UI-файле); settings.py — для геймплейных констант |
 
 ---
 
@@ -638,6 +657,7 @@
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
 > `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `xp_reward=0` (9C), `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}).
 > Босс интегрирован в GameScreen (9C): `_boss` спавнится в Комнате 4 (HP=`settings.BOSS_MAX_HEALTH`), обновляется/рисуется при `active`, входит в combat-`targets`. Подписка `boss_defeated` → `_on_boss_defeated` → `_victory=True`; `GameScreen.victory` (read-only) + победный текст в draw. Босс даёт 0 XP. ВНИМАНИЕ: босс — faction='enemy', поэтому его смерть инкрементит активные KillZombieObjective (generic-фильтр QuestSystem) — будущая балансировка/раздельные цели.
+> HUD (10C): `HUD()` (ui/hud.py) — не BaseScreen, не в стеке. `GameScreen._hud` создаётся в `__init__`, рисуется в `draw` как `self._hud.draw(surface, self._player, self._quest_system)`. Читает только публичный API (`health.percentage`, `hunger.percentage`, `experience.{current_level,current_xp,xp_to_next_level}`, `quest_system.active_quests`→`title`/`objective.progress`). Состояния не хранит → корректен после F9-подмены. Миникарта/HP-бар босса — вне 10C.
 > Save Integration (10B): в GameScreen `F5` → `_save_game` (SaveSystem().save в `GameScreen._SAVE_PATH = SAVES_DIR/savegame.json`), `F9` → `_load_game`. F9 строит свежие системы (`_fresh_systems`), `apply`, подменяет `_player/_quest_system/_lore_system`. Отсутствующий/битый файл — нет-оп (SaveError). Игрок/квесты/лор пересоздаются → старые объекты остаются подписанными на EventBus (известный leak, см. риски). Позиция/HP/голод/прогресс целей квестов не сохраняются (вне 10A). `_SAVE_PATH` патчится в тестах через monkeypatch.
 > SaveSystem (10A): `SaveSystem().save(path, player, quest_system, lore_system)` / `.load(path)→SaveData` / `.apply(data, ...)` / `.load_into(path, ...)`. `SaveError` при отсутствии файла/битом JSON. `SaveData` (data/save_file.py) — снимок: xp/level, skill_levels, inventory_item_ids, active/completed_quest_ids, unlocked_lore_ids; `to_dict`/`from_dict`. ВАЖНО: `apply` рассчитан на СВЕЖИЕ системы; XP восстанавливается первым (выдаёт очки навыков). Завершённые квесты — через новый `QuestSystem.restore` (без повторного XP). Лор-каталог должен быть зарегистрирован до apply. НЕ интегрирован в GameScreen/клавиши — будущий спринт. Активные квесты восстанавливаются на уровне id (прогресс целей не сохраняется — минимальный срез).
 > Boss AI (9D): `boss.update(dt, walls, player)` — преследует игрока в радиусе `BOSS_DETECTION_RANGE` (`_move_toward`, как зомби) и бьёт в радиусе `BOSS_ATTACK_RANGE` по кулдауну `attack_cooldown`. GameScreen зовёт `self._boss.update(dt, walls, self._player)` (НЕ `update(dt)`). Фазы: `boss.phase` (1/2 от `health.percentage`, порог `BOSS_PHASE2_HEALTH_FRACTION`); `boss.speed`/`boss.attack_cooldown` зависят от фазы (фаза 2 = ×`SPEED_MULTIPLIER` / ×`COOLDOWN_MULTIPLIER`). `can_attack` по `_attack_timer`. Все константы — в settings.py. Melee не эмитит событий.

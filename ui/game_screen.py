@@ -30,6 +30,7 @@ from systems.lore import LoreSystem
 from systems.quest_system import QuestSystem
 from systems.save_system import SaveError, SaveSystem
 from ui.base_screen import BaseScreen
+from ui.hud import HUD
 
 _ENEMY_CONSTRUCTORS: dict[str, type[EnemyData]] = {
     "spitter": SpitterData,
@@ -56,6 +57,7 @@ class GameScreen(BaseScreen):
         self._boss: PatientZeroBoss = self._spawn_boss()
         self._victory: bool = False
         self._font_victory = pygame.font.SysFont("monospace", 44, bold=True)
+        self._hud = HUD()
         self._combat = CombatSystem()
         self._world_items: list[Item] = self._spawn_items()
         self._quest_system = QuestSystem(self._player.experience)
@@ -150,6 +152,7 @@ class GameScreen(BaseScreen):
             self._boss.draw(surface, self._camera.offset)
         self._combat.draw(surface, self._camera.offset)
         self._player.draw(surface, self._camera.offset)
+        self._hud.draw(surface, self._player, self._quest_system)
         if self._victory:
             self._draw_victory(surface)
 
