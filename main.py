@@ -15,9 +15,10 @@ class GameStateManager:
         self._stack.append(screen)
 
     def pop(self) -> None:
-        """Убрать верхний экран и вернуться к предыдущему."""
+        """Убрать верхний экран, освободив его ресурсы (cleanup), и вернуться к предыдущему."""
         if self._stack:
-            self._stack.pop()
+            screen = self._stack.pop()
+            screen.cleanup()
 
     @property
     def current(self) -> BaseScreen | None:

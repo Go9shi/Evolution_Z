@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 10E — Main Menu ✅ (New Game / Continue / Quit; игра стартует с меню)  
+**Спринт:** 10F — EventBus Cleanup ✅ (teardown GameScreen; нет накопления подписчиков на F9/New Game/Continue)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -490,6 +490,26 @@
 - Интеграция: меню — вершина стека; `state_manager is None` безопасен
 - Регрессии: GameScreen строится и рисуется; F9-загрузка работает (после переименования `load_game`)
 
+### Спринт 10F — EventBus Cleanup / GameScreen Teardown ✅ (завершён)
+Цель: устранить накопление подписчиков EventBus при F9 / New Game / Continue. Без изменения геймплея и без глобального рефактора EventBus (его `off` уже есть).
+- [x] Фактическая картина: на один GameScreen — 6 подписок (GameScreen ×4: entity_died/dialogue_ended/dialogue_choice_selected/boss_defeated; Player ×1: player_level_up; QuestSystem ×1: entity_died). DialogueSystem/LoreSystem не подписываются (только эмитят)
+- [x] `ui/base_screen.py` — `cleanup()` (нет-оп по умолчанию) как lifecycle-хук
+- [x] `main.py` — `GameStateManager.pop` вызывает `screen.cleanup()` при снятии экрана
+- [x] `ui/game_screen.py` — `cleanup()` (идемпотентно, флаг `_cleaned`): снимает свои 4 подписки + подписки текущих player/quest_system; helper `_detach_systems(player, quest_system)`
+- [x] `ui/game_screen.py` — `load_game` (F9): перед swap снимает подписки СТАРЫХ player/quest_system → повторные загрузки не копят обработчики
+- [x] QuestSystem/Player НЕ модифицированы: их bound-методы снимаются через `EventBus.off` из GameScreen (равенство bound-методов позволяет `list.remove`)
+- [x] `tests/test_eventbus_cleanup.py` — 17 тестов
+
+### Тесты — 772 теста, все зелёные ✅ (после Спринта 10F)
++17 тестов в `tests/test_eventbus_cleanup.py`:
+- Подписки: GameScreen регистрирует 6; entity_died имеет 2 слушателя
+- Cleanup: снимает все подписки (→0); идемпотентен
+- Повторное создание: create→cleanup→create не растит счётчик; 5 циклов чисты
+- pop(): pop GameScreen вызывает cleanup (→0); pop обычного BaseScreen безопасен
+- F9: 5 загрузок держат счётчик стабильным; player_level_up=1, entity_died=2 после нескольких load
+- Continue/New Game: 3 цикла не накапливают (макс 6, после pop →0)
+- Регрессии: quest-прогресс; диалог (T); victory; game over; XP за килл после F9 начисляется один раз
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -667,6 +687,10 @@
 | 2026-06-14 | MainMenuScreen(state_manager, on_quit): транзишены через стек, выход — колбэк | переходы экранов тестируемы на самом меню (как GameScreen строит свои sub-UI); `on_quit` — паттерн `on_close`, в main.py → `Game.stop()`; обе зависимости легко мокаются в тестах |
 | 2026-06-14 | `GameScreen._load_game` → публичный `load_game` | Continue вызывает существующую загрузку (SaveSystem внутри), не дублируя логику; F9 теперь зовёт тот же публичный метод; поведение не изменено |
 | 2026-06-14 | Continue читает наличие сейва через `GameScreen._SAVE_PATH.exists()` | единый файл-сейв (без слотов); проверка пути — не дублирование SaveSystem; нет сейва → нет-оп, остаёмся в меню |
+| 2026-06-14 | `cleanup()` как lifecycle-хук в `BaseScreen` (нет-оп), переопределён в GameScreen; вызывается из `GameStateManager.pop` | минимальный механизм teardown без рефактора EventBus (его `off` уже есть); все экраны имеют cleanup → `pop` безопасен; будущий return-to-menu автоматически чистит GameScreen |
+| 2026-06-14 | GameScreen снимает подписки Player/QuestSystem через `EventBus.off(bound_method)`, не модифицируя их | QuestSystem (Quest) — в списке «не трогать»; равенство bound-методов (`==` по instance+func) позволяет `list.remove` найти и снять; GameScreen — владелец этих объектов, он же управляет их жизненным циклом подписок |
+| 2026-06-14 | F9 `load_game` снимает подписки СТАРЫХ player/quest перед swap | повторная загрузка: `_fresh_systems` добавляет +2 подписки, detach старых −2 → счётчик стабилен; GameScreen-подписки (4) не трогаются (экран жив) |
+| 2026-06-14 | `cleanup` идемпотентен (флаг `_cleaned`) | защита от двойного `off` (ValueError из `list.remove`) при cleanup + последующем pop того же экрана; EventBus не трогаем |
 
 ---
 
@@ -704,6 +728,7 @@
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
 > `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `xp_reward=0` (9C), `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}).
 > Босс интегрирован в GameScreen (9C): `_boss` спавнится в Комнате 4 (HP=`settings.BOSS_MAX_HEALTH`), обновляется/рисуется при `active`, входит в combat-`targets`. Подписка `boss_defeated` → `_on_boss_defeated` → `_victory=True`; `GameScreen.victory` (read-only) + победный текст в draw. Босс даёт 0 XP. ВНИМАНИЕ: босс — faction='enemy', поэтому его смерть инкрементит активные KillZombieObjective (generic-фильтр QuestSystem) — будущая балансировка/раздельные цели.
+> EventBus Cleanup (10F): один GameScreen = 6 подписок EventBus. `BaseScreen.cleanup()` (нет-оп) → переопределён в `GameScreen.cleanup()` (идемпотентен): снимает свои 4 + подписки текущих player/quest_system. `GameStateManager.pop()` зовёт `cleanup()` снятого экрана. `GameScreen.load_game` (F9) перед swap снимает подписки старых player/quest (`_detach_systems`). QuestSystem/Player не менялись — их bound-методы снимаются через `EventBus.off`. Подписчики НЕ копятся при F9/New Game/Continue.
 > Main Menu (10E): игра стартует с `MainMenuScreen(state_manager, on_quit)` (main.py пушит его, `on_quit=game.stop`). New Game: pop меню + push `GameScreen` (depth 1). Continue: при `GameScreen._SAVE_PATH.exists()` → push GameScreen + `screen.load_game()` (публичный, тот же что F9); иначе нет-оп. Quit → `on_quit()` → `Game.stop()` (`_running=False`). ESC в меню (depth 1) тоже выходит (main.py). Слоты/Pause Menu/возврат-в-меню — будущее.
 > Game Over (10D): `GameScreen.game_over` (read-only) выставляется в `_on_entity_died` при `entity is self._player` (событие `entity_died`, новых событий нет). `update` замораживается ранним `return` при `victory or game_over` (враги/босс/combat/подбор/таймеры стоят). `_draw_game_over` рисует «GAME OVER» (взаимоисключение с victory через elif), HUD остаётся под оверлеем. Рестарт/возврат в меню после смерти — будущий спринт.
 > HUD (10C): `HUD()` (ui/hud.py) — не BaseScreen, не в стеке. `GameScreen._hud` создаётся в `__init__`, рисуется в `draw` как `self._hud.draw(surface, self._player, self._quest_system)`. Читает только публичный API (`health.percentage`, `hunger.percentage`, `experience.{current_level,current_xp,xp_to_next_level}`, `quest_system.active_quests`→`title`/`objective.progress`). Состояния не хранит → корректен после F9-подмены. Миникарта/HP-бар босса — вне 10C.

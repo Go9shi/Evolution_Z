@@ -57,6 +57,7 @@ class GameScreen(BaseScreen):
         self._boss: PatientZeroBoss = self._spawn_boss()
         self._victory: bool = False
         self._game_over: bool = False
+        self._cleaned: bool = False
         self._font_victory = pygame.font.SysFont("monospace", 44, bold=True)
         self._hud = HUD()
         self._combat = CombatSystem()
@@ -230,9 +231,32 @@ class GameScreen(BaseScreen):
             return
         player, quest_system, lore_system = self._fresh_systems()
         save_system.apply(data, player, quest_system, lore_system)
+        # Снять подписки заменяемых систем, чтобы повторные загрузки не копили обработчики.
+        self._detach_systems(self._player, self._quest_system)
         self._player = player
         self._quest_system = quest_system
         self._lore_system = lore_system
+
+    def cleanup(self) -> None:
+        """Снять все подписки EventBus этого экрана при его уничтожении (teardown).
+
+        Снимает собственные подписки GameScreen и подписки текущих игрока и системы
+        квестов. Идемпотентно: повторный вызов безопасен. Вызывается GameStateManager.pop.
+        """
+        if self._cleaned:
+            return
+        self._cleaned = True
+        EventBus.off("entity_died", self._on_entity_died)
+        EventBus.off("dialogue_ended", self._on_dialogue_ended)
+        EventBus.off("dialogue_choice_selected", self._on_dialogue_choice)
+        EventBus.off("boss_defeated", self._on_boss_defeated)
+        self._detach_systems(self._player, self._quest_system)
+
+    @staticmethod
+    def _detach_systems(player: Player, quest_system: QuestSystem) -> None:
+        """Снять подписки EventBus у игрока и системы квестов (при swap на F9 / teardown)."""
+        EventBus.off("player_level_up", player._on_level_up)
+        EventBus.off("entity_died", quest_system._on_entity_died)
 
     def _fresh_systems(self) -> tuple[Player, QuestSystem, LoreSystem]:
         """Построить чистые player/quest/lore для восстановления сохранения."""
