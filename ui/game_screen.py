@@ -56,6 +56,7 @@ class GameScreen(BaseScreen):
         self._enemies: list[Zombie] = self._spawn_enemies()
         self._boss: PatientZeroBoss = self._spawn_boss()
         self._victory: bool = False
+        self._game_over: bool = False
         self._font_victory = pygame.font.SysFont("monospace", 44, bold=True)
         self._hud = HUD()
         self._combat = CombatSystem()
@@ -83,6 +84,11 @@ class GameScreen(BaseScreen):
     def victory(self) -> bool:
         """Достигнуто ли победное состояние (босс повержен)."""
         return self._victory
+
+    @property
+    def game_over(self) -> bool:
+        """Наступило ли поражение (игрок погиб)."""
+        return self._game_over
 
     def handle_event(self, event: pygame.event.Event) -> None:
         """ЛКМ — выстрел. F — предмет. I — инвентарь. Tab — навыки. J — квесты. L — лор. T — диалог. F5 — сохранить. F9 — загрузить."""
@@ -121,6 +127,9 @@ class GameScreen(BaseScreen):
             self._load_game()
 
     def update(self, dt: float) -> None:
+        # Терминальные состояния (победа / поражение) замораживают игровой цикл.
+        if self._victory or self._game_over:
+            return
         walls = self._world.wall_rects
         self._player.update(dt, walls)
         self._camera.follow(self._player.pos)
@@ -155,10 +164,17 @@ class GameScreen(BaseScreen):
         self._hud.draw(surface, self._player, self._quest_system)
         if self._victory:
             self._draw_victory(surface)
+        elif self._game_over:
+            self._draw_game_over(surface)
 
     def _draw_victory(self, surface: pygame.Surface) -> None:
         """Минимальный победный результат: центрированное текстовое сообщение."""
         text = self._font_victory.render("VICTORY — PATIENT ZERO DEFEATED", True, (240, 230, 120))
+        surface.blit(text, text.get_rect(center=(SCREEN_W // 2, SCREEN_H // 2)))
+
+    def _draw_game_over(self, surface: pygame.Surface) -> None:
+        """Минимальный экран поражения: центрированный текст GAME OVER."""
+        text = self._font_victory.render("GAME OVER", True, (210, 60, 60))
         surface.blit(text, text.get_rect(center=(SCREEN_W // 2, SCREEN_H // 2)))
 
     # ── private helpers ────────────────────────────────────────────────────
@@ -311,9 +327,11 @@ class GameScreen(BaseScreen):
         }
 
     def _on_entity_died(self, data: dict[str, Any]) -> None:
-        """Начислить XP игроку при гибели врага."""
+        """Начислить XP при гибели врага; объявить поражение при гибели игрока."""
         entity = data["entity"]
-        if entity.faction == "enemy":
+        if entity is self._player:
+            self._game_over = True
+        elif entity.faction == "enemy":
             self._player.add_xp(entity.xp_reward)
 
     @staticmethod
