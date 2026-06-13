@@ -124,7 +124,7 @@ class GameScreen(BaseScreen):
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_F5:
             self._save_game()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_F9:
-            self._load_game()
+            self.load_game()
 
     def update(self, dt: float) -> None:
         # Терминальные состояния (победа / поражение) замораживают игровой цикл.
@@ -216,8 +216,8 @@ class GameScreen(BaseScreen):
         self._SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
         SaveSystem().save(self._SAVE_PATH, self._player, self._quest_system, self._lore_system)
 
-    def _load_game(self) -> None:
-        """F9: загрузить сохранение и восстановить состояние.
+    def load_game(self) -> None:
+        """Загрузить сохранение и восстановить состояние (F9 и Continue из меню).
 
         Отсутствующий или повреждённый файл не ломает игру (SaveError → нет-оп).
         Восстановление идёт в свежие системы (SaveSystem.apply рассчитан на чистые

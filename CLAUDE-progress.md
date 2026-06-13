@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 10D — Game Over ✅ (поражение при смерти игрока + заморозка терминальных состояний)  
+**Спринт:** 10E — Main Menu ✅ (New Game / Continue / Quit; игра стартует с меню)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -469,6 +469,27 @@
 - Отрисовка: draw при game_over и при victory не падает
 - Совместимость: победа по-прежнему работает; game_over и victory независимы
 
+### Спринт 10E — Main Menu ✅ (завершён)
+Цель: игра стартует с главного меню (New Game / Continue / Quit), один файл сейва, без слотов. БЕЗ Pause Menu/Audio/Minimap/Endings.
+- [x] `ui/main_menu.py` — `MainMenuScreen(BaseScreen)`: `__init__(state_manager, on_quit)`; UP/DOWN циклическая навигация, ENTER — активировать; пункты New Game / Continue / Quit
+- [x] New Game / Continue **заменяют** меню на GameScreen (pop меню + push GameScreen → игра на глубине 1, ESC-выход сохранён); Continue активен только при наличии файла сейва
+- [x] Continue использует существующий SaveSystem через `GameScreen.load_game()` (без дублирования save-логики); Continue без сейва — нет-оп (остаёмся в меню)
+- [x] Quit — переданный колбэк `on_quit` (паттерн `on_close`); в `main.py` → `Game.stop()` (новый метод, `_running=False`)
+- [x] `ui/game_screen.py` — `_load_game` → публичный `load_game` (используется F9 и Continue); поведение не изменено
+- [x] `main.py` — `__main__` пушит `MainMenuScreen(state_manager, game.stop)` вместо прямого `GameScreen`
+- [x] `tests/test_main_menu.py` — 20 тестов
+- [x] Smoke (headless): меню → New Game → GameScreen (depth 1); сейв → Continue → xp восстановлен; Quit → колбэк
+
+### Тесты — 755 тестов, все зелёные ✅ (после Спринта 10E)
++20 тестов в `tests/test_main_menu.py`:
+- Меню: BaseScreen; первый пункт выбран; циклические UP/DOWN; игнор не-KEYDOWN
+- New Game: ENTER запускает GameScreen; меню заменено (depth 1)
+- Continue: без сейва — нет-оп (остаёмся в меню); с сейвом — запускает GameScreen; состояние загружено (xp)
+- Quit: ENTER вызывает on_quit-колбэк; не запускает игру
+- Отрисовка: draw без/с сейвом (Continue приглушён); update нет-оп
+- Интеграция: меню — вершина стека; `state_manager is None` безопасен
+- Регрессии: GameScreen строится и рисуется; F9-загрузка работает (после переименования `load_game`)
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -515,7 +536,7 @@
 - [x] `systems/save_system.py` — сохранение / загрузка JSON (10A: ядро; без меню/слотов/интеграции)
 - [x] Интеграция SaveSystem в GameScreen (10B): F5 — сохранить, F9 — загрузить, один файл
 - [ ] Слоты сохранений, меню сохранений — будущий спринт
-- [ ] `ui/main_menu.py` — главное меню со слотами сохранений
+- [x] `ui/main_menu.py` — главное меню (10E): New Game / Continue / Quit, один файл сейва (слоты — будущее)
 - [ ] `systems/audio.py` — SFX и музыка
 - [x] Game Over (10D): поражение при смерти игрока + заморозка victory/game_over в `update`; «GAME OVER» оверлей
 - [x] HUD (10C): HP-бар, бар голода, уровень/XP, трекер квестов (`ui/hud.py`); миникарта — отложена
@@ -642,6 +663,10 @@
 | 2026-06-14 | Game Over через существующий `entity_died` в `_on_entity_died` (`entity is self._player`) | зеркало `boss_defeated`→`victory`; новых событий/подписок нет; идентичность игрока корректна и после F9-подмены `_player` (не ловит «утёкший» старый player) |
 | 2026-06-14 | Заморозка терминальных состояний — ранний `return` в `update` при `victory or game_over` | минимально и безопасно; попутно устранена прежняя недоработка (победа не останавливала цикл); `draw` продолжает работать, HUD виден под оверлеем |
 | 2026-06-14 | `draw`: `if victory … elif game_over …` (взаимоисключение) | оба флага одновременно невозможны (заморозка не даёт второму событию случиться), elif исключает наложение текстов; victory приоритетна |
+| 2026-06-14 | Main Menu стартует первым; New Game/Continue **заменяют** меню (pop+push), а не стекаются | игра остаётся на глубине 1 → ESC-выход (`depth<=1`) работает как раньше; стек GameScreen-overlays (Tab/J/L/I) ведёт себя прежне; меню не нужно после старта (Pause Menu вне скоупа) |
+| 2026-06-14 | MainMenuScreen(state_manager, on_quit): транзишены через стек, выход — колбэк | переходы экранов тестируемы на самом меню (как GameScreen строит свои sub-UI); `on_quit` — паттерн `on_close`, в main.py → `Game.stop()`; обе зависимости легко мокаются в тестах |
+| 2026-06-14 | `GameScreen._load_game` → публичный `load_game` | Continue вызывает существующую загрузку (SaveSystem внутри), не дублируя логику; F9 теперь зовёт тот же публичный метод; поведение не изменено |
+| 2026-06-14 | Continue читает наличие сейва через `GameScreen._SAVE_PATH.exists()` | единый файл-сейв (без слотов); проверка пути — не дублирование SaveSystem; нет сейва → нет-оп, остаёмся в меню |
 
 ---
 
@@ -679,6 +704,7 @@
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
 > `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `xp_reward=0` (9C), `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}).
 > Босс интегрирован в GameScreen (9C): `_boss` спавнится в Комнате 4 (HP=`settings.BOSS_MAX_HEALTH`), обновляется/рисуется при `active`, входит в combat-`targets`. Подписка `boss_defeated` → `_on_boss_defeated` → `_victory=True`; `GameScreen.victory` (read-only) + победный текст в draw. Босс даёт 0 XP. ВНИМАНИЕ: босс — faction='enemy', поэтому его смерть инкрементит активные KillZombieObjective (generic-фильтр QuestSystem) — будущая балансировка/раздельные цели.
+> Main Menu (10E): игра стартует с `MainMenuScreen(state_manager, on_quit)` (main.py пушит его, `on_quit=game.stop`). New Game: pop меню + push `GameScreen` (depth 1). Continue: при `GameScreen._SAVE_PATH.exists()` → push GameScreen + `screen.load_game()` (публичный, тот же что F9); иначе нет-оп. Quit → `on_quit()` → `Game.stop()` (`_running=False`). ESC в меню (depth 1) тоже выходит (main.py). Слоты/Pause Menu/возврат-в-меню — будущее.
 > Game Over (10D): `GameScreen.game_over` (read-only) выставляется в `_on_entity_died` при `entity is self._player` (событие `entity_died`, новых событий нет). `update` замораживается ранним `return` при `victory or game_over` (враги/босс/combat/подбор/таймеры стоят). `_draw_game_over` рисует «GAME OVER» (взаимоисключение с victory через elif), HUD остаётся под оверлеем. Рестарт/возврат в меню после смерти — будущий спринт.
 > HUD (10C): `HUD()` (ui/hud.py) — не BaseScreen, не в стеке. `GameScreen._hud` создаётся в `__init__`, рисуется в `draw` как `self._hud.draw(surface, self._player, self._quest_system)`. Читает только публичный API (`health.percentage`, `hunger.percentage`, `experience.{current_level,current_xp,xp_to_next_level}`, `quest_system.active_quests`→`title`/`objective.progress`). Состояния не хранит → корректен после F9-подмены. Миникарта/HP-бар босса — вне 10C.
 > Save Integration (10B): в GameScreen `F5` → `_save_game` (SaveSystem().save в `GameScreen._SAVE_PATH = SAVES_DIR/savegame.json`), `F9` → `_load_game`. F9 строит свежие системы (`_fresh_systems`), `apply`, подменяет `_player/_quest_system/_lore_system`. Отсутствующий/битый файл — нет-оп (SaveError). Игрок/квесты/лор пересоздаются → старые объекты остаются подписанными на EventBus (известный leak, см. риски). Позиция/HP/голод/прогресс целей квестов не сохраняются (вне 10A). `_SAVE_PATH` патчится в тестах через monkeypatch.

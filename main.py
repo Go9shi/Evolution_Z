@@ -46,6 +46,10 @@ class Game:
         self._running = False
         self.state_manager = GameStateManager()
 
+    def stop(self) -> None:
+        """Завершить игровой цикл (используется пунктом Quit в Main Menu)."""
+        self._running = False
+
     def run(self) -> None:
         """Запуск основного цикла игры."""
         self._running = True
@@ -83,8 +87,8 @@ class Game:
 
 
 if __name__ == "__main__":
-    from ui.game_screen import GameScreen
+    from ui.main_menu import MainMenuScreen
 
     game = Game()
-    game.state_manager.push(GameScreen(game.state_manager))
+    game.state_manager.push(MainMenuScreen(game.state_manager, game.stop))
     game.run()
