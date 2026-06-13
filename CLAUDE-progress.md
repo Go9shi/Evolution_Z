@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 10A — Save System ✅ (ядро сохранения/загрузки в JSON)  
+**Спринт:** 10B — Save Integration ✅ (F5 сохранить / F9 загрузить в GameScreen)  
 **Дата последнего обновления:** 2026-06-12
 
 ---
@@ -421,6 +421,22 @@
 - Lore: открытые восстановлены; незарегистрированные/закрытые не восстанавливаются
 - Full round-trip: capture → save → load_into → capture идентичны
 
+### Спринт 10B — Save Integration ✅ (завершён)
+Цель: подключить SaveSystem к игре. Минимальный срез: F5 — сохранить, F9 — загрузить, один файл. БЕЗ меню/слотов/UI сохранений/подтверждений/автосейва.
+- [x] `ui/game_screen.py` — клавиша `F5` → `_save_game` (SaveSystem().save в `SAVES_DIR/savegame.json`, mkdir); `F9` → `_load_game`. F5/F9 были свободны (заняты ЛКМ/F/Tab/J/L/I/T)
+- [x] `_load_game` — `SaveSystem().load` (SaveError → нет-оп: отсутствующий/битый/не-объект файл игру не ломает); восстановление в свежие системы (`_fresh_systems`: player+pistol, QuestSystem, LoreSystem+каталог) через `SaveSystem.apply`; затем подмена `self._player/_quest_system/_lore_system` (поля читаются каждый кадр — swap безопасен)
+- [x] `_SAVE_PATH` — класс-атрибут (один файл, тестируется через monkeypatch)
+- [x] Логика восстановления не дублируется — переиспользован `SaveSystem.apply` (10A)
+- [x] `tests/test_save_integration.py` — 14 тестов
+- [x] Smoke (headless): F5 (xp+навык+предмет+квест+лор) → F9 → всё восстановлено
+
+### Тесты — 710 тестов, все зелёные ✅ (после Спринта 10B)
++14 тестов в `tests/test_save_integration.py`:
+- F5 Save: создаёт файл; валидный JSON; сохраняет текущее состояние (xp)
+- F9 Load: восстанавливает состояние (изменил после save → F9 откатил); пересоздаёт игрока (новый объект)
+- Интеграция: восстановлены XP/уровень, навыки, инвентарь, квесты, лор; игра продолжает работать после загрузки
+- Безопасность: отсутствующий / битый / не-объект файл → нет-оп, состояние не тронуто (тот же объект игрока)
+
 ### Тесты — 483 теста, все зелёные ✅ (после Спринта 8F)
 +14 тестов в `tests/test_dialogue_integration.py`:
 - Загрузка: диалоги доступны GameScreen, корректный стартовый узел
@@ -465,7 +481,8 @@
 
 ### Спринт 10 — Полировка
 - [x] `systems/save_system.py` — сохранение / загрузка JSON (10A: ядро; без меню/слотов/интеграции)
-- [ ] Интеграция SaveSystem в GameScreen (F5/F9, слоты, меню) — будущий спринт
+- [x] Интеграция SaveSystem в GameScreen (10B): F5 — сохранить, F9 — загрузить, один файл
+- [ ] Слоты сохранений, меню сохранений — будущий спринт
 - [ ] `ui/main_menu.py` — главное меню со слотами сохранений
 - [ ] `systems/audio.py` — SFX и музыка
 - [ ] HUD: HP-бар (через `player.health.percentage`), миникарта, трекер квестов
@@ -581,6 +598,9 @@
 | 2026-06-12 | Добавлен публичный `QuestSystem.restore(active, completed)` (необходимо) | нет публичного пути восстановить ЗАВЕРШЁННЫЕ квесты; `accept_quest`+`complete_quest` повторно начислили бы reward_xp и эмитили `quest_completed`. `restore` ставит статусы и списки без наград/событий; обычный поток её не вызывает |
 | 2026-06-12 | Предметы восстанавливаются по `item_id` из `items.json` (food→FoodItem, quest→QuestItem) | сохраняем минимум (item_id); пересборка повторяет категории `GameScreen._spawn_items`; неизвестный id пропускается. `systems→entities` уже легитимен (combat импортирует bullet) |
 | 2026-06-12 | Лор восстанавливается `lore_system.unlock(id)` (каталог уже зарегистрирован) | LoreSystem-дизайн: каталог регистрируется отдельно, открытие — по id; SaveSystem лишь открывает сохранённые id; незарегистрированные — нет-оп |
+| 2026-06-12 | Save Integration: F5/F9 в GameScreen, один файл `SAVES_DIR/savegame.json` | клавиши были свободны; единый файл по ТЗ (без слотов/меню); `_SAVE_PATH` — класс-атрибут для тестируемости (monkeypatch) |
+| 2026-06-12 | F9 строит свежие player/quest/lore (`_fresh_systems`) и подменяет ссылки | `SaveSystem.apply` (10A) рассчитан на чистые объекты (add_xp/add_item/upgrade аккумулируют); загрузка в живые объекты двоила бы состояние. Поля систем читаются каждый кадр → swap корректен; restore-логика не дублируется (переиспользован apply) |
+| 2026-06-12 | F9 на отсутствующем/битом файле — нет-оп (ловим SaveError до подмены) | игра не должна ломаться; свежие системы строятся только после успешного `load`; при ошибке текущее состояние сохраняется нетронутым |
 
 ---
 
@@ -618,6 +638,7 @@
 > В GameScreen: предметы в `_world_items`; автоподбор при `colliderect`; клавиша F — использовать первый предмет (полиморфизм: quest пропускается, food применяется).
 > `PatientZeroBoss(x, y, max_health)` — финальный босс (ядро, 9B). Иерархия `Entity → Boss → PatientZeroBoss`. faction='enemy', `xp_reward=0` (9C), `rect` (TILE_SIZE*2), совместим с CombatSystem. При смерти эмитит `boss_defeated` ({boss}) ровно один раз ПЛЮС унаследованный `entity_died` ({entity}).
 > Босс интегрирован в GameScreen (9C): `_boss` спавнится в Комнате 4 (HP=`settings.BOSS_MAX_HEALTH`), обновляется/рисуется при `active`, входит в combat-`targets`. Подписка `boss_defeated` → `_on_boss_defeated` → `_victory=True`; `GameScreen.victory` (read-only) + победный текст в draw. Босс даёт 0 XP. ВНИМАНИЕ: босс — faction='enemy', поэтому его смерть инкрементит активные KillZombieObjective (generic-фильтр QuestSystem) — будущая балансировка/раздельные цели.
+> Save Integration (10B): в GameScreen `F5` → `_save_game` (SaveSystem().save в `GameScreen._SAVE_PATH = SAVES_DIR/savegame.json`), `F9` → `_load_game`. F9 строит свежие системы (`_fresh_systems`), `apply`, подменяет `_player/_quest_system/_lore_system`. Отсутствующий/битый файл — нет-оп (SaveError). Игрок/квесты/лор пересоздаются → старые объекты остаются подписанными на EventBus (известный leak, см. риски). Позиция/HP/голод/прогресс целей квестов не сохраняются (вне 10A). `_SAVE_PATH` патчится в тестах через monkeypatch.
 > SaveSystem (10A): `SaveSystem().save(path, player, quest_system, lore_system)` / `.load(path)→SaveData` / `.apply(data, ...)` / `.load_into(path, ...)`. `SaveError` при отсутствии файла/битом JSON. `SaveData` (data/save_file.py) — снимок: xp/level, skill_levels, inventory_item_ids, active/completed_quest_ids, unlocked_lore_ids; `to_dict`/`from_dict`. ВАЖНО: `apply` рассчитан на СВЕЖИЕ системы; XP восстанавливается первым (выдаёт очки навыков). Завершённые квесты — через новый `QuestSystem.restore` (без повторного XP). Лор-каталог должен быть зарегистрирован до apply. НЕ интегрирован в GameScreen/клавиши — будущий спринт. Активные квесты восстанавливаются на уровне id (прогресс целей не сохраняется — минимальный срез).
 > Boss AI (9D): `boss.update(dt, walls, player)` — преследует игрока в радиусе `BOSS_DETECTION_RANGE` (`_move_toward`, как зомби) и бьёт в радиусе `BOSS_ATTACK_RANGE` по кулдауну `attack_cooldown`. GameScreen зовёт `self._boss.update(dt, walls, self._player)` (НЕ `update(dt)`). Фазы: `boss.phase` (1/2 от `health.percentage`, порог `BOSS_PHASE2_HEALTH_FRACTION`); `boss.speed`/`boss.attack_cooldown` зависят от фазы (фаза 2 = ×`SPEED_MULTIPLIER` / ×`COOLDOWN_MULTIPLIER`). `can_attack` по `_attack_timer`. Все константы — в settings.py. Melee не эмитит событий.
 > `InventoryUI(inventory, on_close)` — оверлей инвентаря (BaseScreen). Открывается клавишей `I` в GameScreen (lazy import, `on_close=state_manager.pop`). UP/DOWN циклическая навигация, ESC закрывает. Только чтение через `inventory.items` (+ `count`/`capacity`); состояние не дублирует. Пустой → «Inventory is empty.». Показывает имена списком + description выбранного. `ui/inventory_ui.py` больше не стаб.

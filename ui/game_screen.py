@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import Any, cast
 
 import pygame
@@ -19,7 +20,7 @@ from entities.items.quest_item import QuestItem
 from entities.player import Player
 from entities.weapons.pistol import Pistol
 from entities.zombie import RunnerZombie, SpitterZombie, WalkerZombie, Zombie
-from settings import BOSS_MAX_HEALTH, DATA_DIR, SCREEN_H, SCREEN_W, TILE_SIZE
+from settings import BOSS_MAX_HEALTH, DATA_DIR, SAVES_DIR, SCREEN_H, SCREEN_W, TILE_SIZE
 from systems.camera import Camera
 from systems.combat import CombatSystem
 from systems.dialogue import DialogueSystem
@@ -27,6 +28,7 @@ from systems.event_bus import EventBus
 from systems.game_world import GameWorld
 from systems.lore import LoreSystem
 from systems.quest_system import QuestSystem
+from systems.save_system import SaveError, SaveSystem
 from ui.base_screen import BaseScreen
 
 _ENEMY_CONSTRUCTORS: dict[str, type[EnemyData]] = {
@@ -40,6 +42,9 @@ class GameScreen(BaseScreen):
     # Стартовая позиция игрока — центр комнаты 1 (tile 12, 6)
     _START_X: float = 12 * TILE_SIZE + TILE_SIZE / 2
     _START_Y: float = 6 * TILE_SIZE + TILE_SIZE / 2
+
+    # Единый файл быстрого сохранения (без слотов).
+    _SAVE_PATH: Path = SAVES_DIR / "savegame.json"
 
     def __init__(self, state_manager: Any = None) -> None:
         self._state_manager = state_manager
@@ -78,7 +83,7 @@ class GameScreen(BaseScreen):
         return self._victory
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        """ЛКМ — выстрел. F — предмет. I — инвентарь. Tab — навыки. J — квесты. L — лор. T — диалог."""
+        """ЛКМ — выстрел. F — предмет. I — инвентарь. Tab — навыки. J — квесты. L — лор. T — диалог. F5 — сохранить. F9 — загрузить."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_world = pygame.Vector2(event.pos) + self._camera.offset
             direction = mouse_world - self._player.pos
@@ -108,6 +113,10 @@ class GameScreen(BaseScreen):
                 )
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_t:
             self._start_dialogue("ranger_intro")
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_F5:
+            self._save_game()
+        elif event.type == pygame.KEYDOWN and event.key == pygame.K_F9:
+            self._load_game()
 
     def update(self, dt: float) -> None:
         walls = self._world.wall_rects
@@ -180,6 +189,41 @@ class GameScreen(BaseScreen):
     def _on_boss_defeated(self, data: dict[str, Any]) -> None:
         """Установить победное состояние при гибели босса (EventBus `boss_defeated`)."""
         self._victory = True
+
+    # ── save / load (Sprint 10B) ────────────────────────────────────────────
+
+    def _save_game(self) -> None:
+        """F5: сохранить текущее состояние через SaveSystem в единый файл."""
+        self._SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        SaveSystem().save(self._SAVE_PATH, self._player, self._quest_system, self._lore_system)
+
+    def _load_game(self) -> None:
+        """F9: загрузить сохранение и восстановить состояние.
+
+        Отсутствующий или повреждённый файл не ломает игру (SaveError → нет-оп).
+        Восстановление идёт в свежие системы (SaveSystem.apply рассчитан на чистые
+        объекты), затем ссылки подменяются — последующие кадры читают новые системы.
+        """
+        save_system = SaveSystem()
+        try:
+            data = save_system.load(self._SAVE_PATH)
+        except SaveError:
+            return
+        player, quest_system, lore_system = self._fresh_systems()
+        save_system.apply(data, player, quest_system, lore_system)
+        self._player = player
+        self._quest_system = quest_system
+        self._lore_system = lore_system
+
+    def _fresh_systems(self) -> tuple[Player, QuestSystem, LoreSystem]:
+        """Построить чистые player/quest/lore для восстановления сохранения."""
+        player = Player(self._START_X, self._START_Y, self._load_player_config())
+        player.equip(Pistol(self._load_weapon_config("pistol")))
+        quest_system = QuestSystem(player.experience)
+        lore_system = LoreSystem()
+        for entry in self._load_lore_entries():
+            lore_system.register(entry)
+        return player, quest_system, lore_system
 
     @staticmethod
     def _load_quests() -> list[Quest]:
