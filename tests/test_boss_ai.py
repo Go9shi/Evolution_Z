@@ -10,6 +10,7 @@ from settings import (
     BOSS_ATTACK_COOLDOWN,
     BOSS_DAMAGE,
     BOSS_SPEED,
+    BOSS_XP_REWARD,
 )
 from systems.combat import CombatSystem
 from systems.event_bus import EventBus
@@ -209,8 +210,8 @@ class TestRegressions:
         combat.update(0.016, [], [boss])
         assert boss.health.current == 475
 
-    def test_xp_reward_unchanged(self) -> None:
-        assert make_boss().xp_reward == 0
+    def test_xp_reward_from_settings(self) -> None:
+        assert make_boss().xp_reward == BOSS_XP_REWARD
 
     def test_walls_block_boss_movement(self) -> None:
         # Стена между боссом и игроком не даёт боссу пройти сквозь неё.

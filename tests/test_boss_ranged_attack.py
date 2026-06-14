@@ -162,6 +162,8 @@ class TestIntegration:
     def test_gamescreen_collects_boss_bullets(self) -> None:
         screen = GameScreen()
         to_phase2(screen._boss)
+        # Игрок в радиусе обнаружения босса — иначе кислота не стреляет (Sprint 9G).
+        screen._player.pos.update(screen._boss.pos.x + 50.0, screen._boss.pos.y)
         screen.update(0.016)
         assert len(screen._combat.bullets) >= 1  # пуля босса попала в CombatSystem
 

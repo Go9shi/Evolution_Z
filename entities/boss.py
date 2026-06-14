@@ -22,6 +22,7 @@ from settings import (
     BOSS_SPEED,
     BOSS_SUMMON_COOLDOWN,
     BOSS_SUMMON_MAX,
+    BOSS_XP_REWARD,
     TILE_SIZE,
 )
 from systems.event_bus import EventBus
@@ -37,9 +38,9 @@ class Boss(Entity):
 
     COLOR: tuple[int, int, int] = (120, 30, 120)
     # Босс — faction='enemy', значит проходит через путь начисления XP за врагов
-    # (GameScreen._on_entity_died читает entity.xp_reward). Поле нужно для совместимости
-    # с этим путём, как у Zombie.xp_reward; 0 = без награды (балансировка — будущий спринт).
-    xp_reward: int = 0
+    # (GameScreen._on_entity_died читает entity.xp_reward). Значение — из settings
+    # (Sprint 9G), как у Zombie.xp_reward; без новой системы наград.
+    xp_reward: int = BOSS_XP_REWARD
 
     def __init__(self, x: float, y: float, max_health: int, width: int, height: int) -> None:
         super().__init__(x, y, max_health)
@@ -79,9 +80,10 @@ class Boss(Entity):
 class PatientZeroBoss(Boss):
     """Носитель Ноль — финальный босс.
 
-    Минимальный AI (Sprint 9D), зеркалит подход зомби: преследование игрока в радиусе
-    обнаружения и ближняя атака по кулдауну. Две фазы — при HP <= 50% (фаза 2) босс
-    быстрее и бьёт чаще. Спец-атаки/кислота/призыв врагов — будущие спринты.
+    AI зеркалит подход зомби: преследование игрока в радиусе обнаружения и ближняя атака
+    по кулдауну (Sprint 9D). Две фазы — при HP <= 50% (фаза 2) босс быстрее и бьёт чаще.
+    В фазе 2 при обнаруженном игроке также плюётся кислотой (Sprint 9E) и призывает
+    миньонов (Sprint 9F), каждое — по своему кулдауну.
     """
 
     COLOR = (150, 20, 90)
@@ -166,10 +168,11 @@ class PatientZeroBoss(Boss):
             return
 
         player_pos = player.pos
-        # Phase 2 (только живой босс): кислота и призыв миньонов, каждый по своему
-        # кулдауну. Гейт is_alive не даёт «мёртвому» боссу (0% HP → phase 2) действовать,
-        # если update вызван после гибели. Melee ниже не меняется.
-        if self.is_alive and self.phase == 2:
+        # Phase 2 — только живой босс при ОБНАРУЖЕННОМ игроке: кислота и призыв миньонов,
+        # каждый по своему кулдауну. _detect_player — тот же радиус, что у melee/преследования,
+        # без отдельной системы агро. Гейт is_alive не даёт «мёртвому» боссу (0% HP → phase 2)
+        # действовать, если update вызван после гибели. Melee ниже не меняется.
+        if self.is_alive and self.phase == 2 and self._detect_player(player_pos):
             if self.can_spit:
                 self.spit_acid(player)
                 self._acid_timer = BOSS_ACID_COOLDOWN
@@ -225,6 +228,9 @@ class PatientZeroBoss(Boss):
         """
         if self._minion_config is None:
             return
+        # Прунинг мёртвых ссылок: список живых остаётся ограниченным (≤ BOSS_SUMMON_MAX),
+        # не накапливая трупы. Лимит (can_summon) при этом не меняется.
+        self._summoned = [m for m in self._summoned if m.active]
         minion = WalkerZombie(self.pos.x + TILE_SIZE, self.pos.y, self._minion_config)
         self._pending_minions.append(minion)
         self._summoned.append(minion)

@@ -7,7 +7,7 @@ from entities.boss import PatientZeroBoss
 from entities.bullet import Bullet
 from entities.zombie import Zombie
 from main import GameStateManager
-from settings import BOSS_MAX_HEALTH
+from settings import BOSS_MAX_HEALTH, BOSS_XP_REWARD
 from systems.event_bus import EventBus
 from ui.game_screen import GameScreen
 
@@ -161,11 +161,11 @@ class TestRegressions:
         assert screen._player.experience.current_xp == zombie.xp_reward
         assert zombie.xp_reward > 0
 
-    def test_boss_death_grants_no_xp(self) -> None:
-        # Босс проходит через _on_entity_died без падения; xp_reward=0 → XP не даёт.
+    def test_boss_death_grants_xp(self) -> None:
+        # Босс проходит через _on_entity_died; xp_reward=BOSS_XP_REWARD (Sprint 9G) → XP даёт.
         _, screen = make_game()
         screen._boss.take_damage(BOSS_MAX_HEALTH)
-        assert screen._player.experience.current_xp == 0
+        assert screen._player.experience.current_xp == BOSS_XP_REWARD
 
     def test_zombies_pruned_when_dead_boss_kept(self) -> None:
         _, screen = make_game()

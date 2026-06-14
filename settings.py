@@ -38,6 +38,9 @@ BOSS_ACID_SIZE: int = 8
 # миньоны — существующий WalkerZombie, без новых типов/BossData/JSON.
 BOSS_SUMMON_COOLDOWN: float = 6.0
 BOSS_SUMMON_MAX: int = 3
+# Награда XP за финального босса (Sprint 9G). Идёт существующим путём
+# GameScreen._on_entity_died (entity.xp_reward), без новой системы наград.
+BOSS_XP_REWARD: int = 200
 
 # Тайлы
 TILE_SIZE: int = 32

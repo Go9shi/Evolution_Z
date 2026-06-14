@@ -32,6 +32,12 @@ def make_player(x: float = 600.0, y: float = 300.0, hp: int = 100) -> Entity:
     return Entity(x, y, hp)
 
 
+def _colocated_player(boss: PatientZeroBoss) -> Entity:
+    """Игрок на позиции босса: в attack-range → босс стоит на месте и всегда обнаружен
+    (Sprint 9G: спецатаки гейтятся _detect_player). Высокий HP — переживает melee за цикл."""
+    return Entity(boss.pos.x, boss.pos.y, 100_000)
+
+
 def to_phase2(boss: PatientZeroBoss) -> None:
     """Перевести босса во вторую фазу (HP ниже 50%), не убивая."""
     boss.take_damage(boss.health.maximum * 0.6)
@@ -138,20 +144,20 @@ class TestLimits:
     def test_respects_max_simultaneous(self) -> None:
         boss = make_boss()
         to_phase2(boss)
-        collected = self._summon_repeatedly(boss, make_player(), 6)
+        collected = self._summon_repeatedly(boss, _colocated_player(boss), 6)
         assert len(collected) == BOSS_SUMMON_MAX
         assert boss._active_minions() == BOSS_SUMMON_MAX
 
     def test_not_infinite(self) -> None:
         boss = make_boss()
         to_phase2(boss)
-        collected = self._summon_repeatedly(boss, make_player(), 20)  # много попыток
+        collected = self._summon_repeatedly(boss, _colocated_player(boss), 20)  # много попыток
         assert len(collected) == BOSS_SUMMON_MAX  # не растёт бесконечно
 
     def test_slot_frees_when_minion_dies(self) -> None:
         boss = make_boss()
         to_phase2(boss)
-        player = make_player()
+        player = _colocated_player(boss)
         collected = self._summon_repeatedly(boss, player, 6)
         assert len(collected) == BOSS_SUMMON_MAX
         collected[0].take_damage(collected[0].health.maximum)  # один миньон гибнет
@@ -166,6 +172,8 @@ class TestIntegration:
     def _summon_one(self, screen: GameScreen) -> WalkerZombie:
         """Перевести босса в phase 2, обновить экран, вернуть призванного миньона."""
         to_phase2(screen._boss)
+        # Игрок в радиусе обнаружения босса — иначе призыв не происходит (Sprint 9G).
+        screen._player.pos.update(screen._boss.pos.x + 50.0, screen._boss.pos.y)
         before = {id(e) for e in screen._enemies}
         screen.update(0.016)
         new = [e for e in screen._enemies if id(e) not in before]
