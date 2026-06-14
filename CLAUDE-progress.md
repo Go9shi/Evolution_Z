@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 10G — Pause Menu ✅ (ESC→пауза; Resume/Save/Main Menu/Quit; выход из Game Over/Victory в меню)  
+**Спринт:** 9F — Patient Zero Minion Summon ✅ (призыв WalkerZombie в Phase 2: очередь + collect_spawned_minions, кулдаун + лимит живых)  
 **Дата последнего обновления:** 2026-06-14
 
 ---
@@ -500,6 +500,43 @@
 - [x] QuestSystem/Player НЕ модифицированы: их bound-методы снимаются через `EventBus.off` из GameScreen (равенство bound-методов позволяет `list.remove`)
 - [x] `tests/test_eventbus_cleanup.py` — 17 тестов
 
+### Спринт 9F — Patient Zero Minion Summon (Phase 2) ✅ (завершён)
+Цель: во второй фазе (HP≤50%) босс периодически призывает заражённых рядом с собой. Только существующие типы зомби, без новой системы спавна/типов миньонов.
+- [x] Фактическая проверка: `WalkerZombie(x, y, EnemyData)` требует конфиг; у босса его нет, JSON в entity-слое нарушил бы слои. Расхождение задача↔код решено инъекцией `EnemyData` в `PatientZeroBoss(minion_config=None)` — босс строит реальные WalkerZombie из готового dataclass
+- [x] `settings.py` — `BOSS_SUMMON_COOLDOWN`, `BOSS_SUMMON_MAX` (рядом с прочими `BOSS_*`; без BossData/JSON)
+- [x] `entities/boss.py` (`PatientZeroBoss`): опц. `minion_config`; `_summon_timer`, `_pending_minions`, `_summoned`; `can_summon` (конфиг + кулдаун + лимит живых `_active_minions()`); `summon_minion` (WalkerZombie у `pos.x+TILE_SIZE`, в очередь + учёт ссылки); `collect_spawned_minions` (слив очереди, паттерн `collect_spawned_bullets`). Ветка Phase 2 в `update` — кислота и призыв, каждый по своему кулдауну, под общим гейтом `is_alive and phase==2`
+- [x] `ui/game_screen.py` — `_spawn_boss` передаёт walker-конфиг боссу; в `update` после `boss.update` — `self._enemies.extend(self._boss.collect_spawned_minions())`. CombatSystem/EventBus/Zombie не менялись
+- [x] XP за миньонов работает «бесплатно»: WalkerZombie `faction='enemy'`, `_on_entity_died` уже начисляет `xp_reward`
+- [x] `tests/test_boss_summon.py` — 24 теста
+- [x] Headless smoke: phase 2 → миньон появился в `_enemies` (4→5) → его AI обновляется (state=ATTACK) → получает урон от пули игрока через CombatSystem (80→70)
+
+### Тесты — 844 теста, все зелёные ✅ (после Спринта 9F)
++24 теста в `tests/test_boss_summon.py`:
+- Создание: пустая очередь; `collect_spawned_minions` есть; очередь сливается; `can_summon` True с конфигом / False без
+- Фазы: Phase 1 не призывает; Phase 2 призывает WalkerZombie; без конфига/без игрока/мёртвый босс — не призывает
+- Кулдаун: повторный призыв в пределах кулдауна блокируется; после истечения — снова
+- Лимиты: соблюдён `BOSS_SUMMON_MAX` одновременно; не растёт бесконечно (20 попыток → MAX); слот освобождается при гибели миньона
+- Интеграция: GameScreen получает врага (+1); миньон участвует в update (state→ATTACK), в draw (не падает), в CombatSystem (пуля игрока ранит)
+- Регрессии: melee фазы 1; кислота фазы 2; `boss_defeated` один раз; victory/game_over
+
+### Спринт 9E — Patient Zero Acid Attack (Phase 2) ✅ (завершён)
+Цель: дальнобойная кислотная спец-атака `PatientZeroBoss` во второй фазе (HP≤50%), периодический плевок по игроку. Через существующие паттерны, без новой архитектуры снарядов.
+- [x] Фактическая проверка: `AcidBullet` уже есть (`entities/bullet.py`), переиспользован напрямую — новый класс снаряда НЕ создан. Контракт Bullet не менялся
+- [x] `settings.py` — `BOSS_ACID_COOLDOWN/DAMAGE/SPEED/RANGE/SIZE` (рядом с прочими `BOSS_*`). Обоснование: CLAUDE.md требует константы в settings и запрещает магию; задача запрещает BossData/JSON → settings единственный совместимый дом
+- [x] `entities/boss.py` (`PatientZeroBoss`): `_acid_timer`, `_pending_bullets`, `can_spit`, `spit_acid` (зеркало `SpitterZombie.attack`: нормализация направления, `AcidBullet(origin_tag='enemy')`, очередь), `collect_spawned_bullets` (слив очереди). В `update` — декремент `_acid_timer` + ветка Phase 2: `is_alive and phase==2 and can_spit` → плевок по отдельному кулдауну. Melee/преследование/фазы 9D не тронуты
+- [x] `ui/game_screen.py` — после `boss.update` собираем `self._boss.collect_spawned_bullets()` в combat (как для зомби, одна строка). CombatSystem/EventBus не менялись
+- [x] `tests/test_boss_ranged_attack.py` — 23 теста
+- [x] Headless smoke: GameScreen → босс в Phase 2 → spit → CombatSystem → игрок получает 15 урона (100→85); полный `GameScreen.update` тоже собирает пули босса
+
+### Тесты — 820 тестов, все зелёные ✅ (после Спринта 9E)
++23 теста в `tests/test_boss_ranged_attack.py`:
+- Создание: пустая очередь снарядов; `collect_spawned_bullets` есть; `can_spit` изначально True; возвращается list
+- Спавн: Phase 1 не плюётся; Phase 2 спавнит AcidBullet; без игрока — нет; мёртвый босс (0%HP→phase2) — нет (гейт `is_alive`); collect сливает очередь; нулевое направление — нет-оп
+- Направление: летит вниз/вправо к игроку; диагональ нормализована (dx≈dy)
+- Кулдаун: повторный выстрел в пределах кулдауна блокируется; после истечения — снова стреляет
+- Интеграция: GameScreen собирает пули босса в CombatSystem; реальный Player получает урон от кислоты; melee фазы 1 продолжает работать; `origin_tag='enemy'` и `damage=BOSS_ACID_DAMAGE`
+- Регрессии: `boss_defeated` эмитится один раз; victory/game_over работают; Phase 1 поведение прежнее (погоня, без снарядов)
+
 ### Спринт 10G — Pause Menu / завершение жизненного цикла сессии ✅ (завершён)
 Цель: устранить игровые тупики (ESC убивал приложение; из Game Over/Victory нет выхода) и дать штатный Save через UI. Минимальный вертикальный срез на существующем стеке экранов, без новых менеджеров/систем/данных.
 - [x] `ui/pause_menu.py` (был пустой стаб) — `PauseMenuScreen`: оверлей Resume/Save Game/Main Menu/Quit; UP/DOWN (циклически), ENTER, ESC→Resume. Стиль MainMenu + полупрозрачный overlay (как SkillTreeUI/QuestLogUI). Не владеет логикой — 4 колбэка (паттерн `on_close`)
@@ -564,7 +601,9 @@
 - [x] `entities/boss.py` — базовый `Boss(Entity)` + `PatientZeroBoss` — **ядро** (9B): HP, faction, урон, смерть, `boss_defeated`
 - [x] Интеграция босса в GameScreen (9C): спавн в Комнате 4, combat/урон/смерть, победное состояние по `boss_defeated`
 - [x] AI босса (9D): преследование игрока, ближняя атака по кулдауну, 2 фазы (HP<=50% → быстрее + ниже кулдаун)
-- [ ] Расширение `PatientZeroBoss` — спец-атаки, призыв врагов, патруль вне боя (будущий спринт)
+- [x] Кислотная спец-атака фазы 2 (9E): дальнобойный AcidBullet по отдельному кулдауну, по образцу SpitterZombie
+- [x] Призыв миньонов фазы 2 (9F): WalkerZombie рядом с боссом, отдельный кулдаун + лимит одновременно живых
+- [ ] Расширение `PatientZeroBoss` — патруль вне боя (будущий спринт)
 - [ ] Экран/катсцена победы, концовки (хорошая/плохая) — будущий спринт
 - [ ] `assets/maps/eden7.tmx` — арена финального боя
 - [ ] Логика концовок: хорошая / плохая
@@ -714,6 +753,15 @@
 | 2026-06-14 | ESC-выход вынесен из `main.py` в делегирование экрану; quit лишь если корневой экран не открыл оверлей (`at_root до` + `depth<=1 после`) | GameScreen перехватывает ESC (пауза, depth↑→нет quit); оверлеи закрываются (pop); Main Menu не изменён (ESC игнорирует → depth не растёт → quit). Альтернатива (ESC-обработчик в MainMenu) запрещена правилом «не рефакторить Main Menu» |
 | 2026-06-14 | `GameScreen.on_quit` опционален (default нет-оп); проброшен из MainMenu (New Game/Continue) | существующие тесты создают GameScreen без on_quit — не ломаются; реальная игра прокидывает `Game.stop` → Quit/Main Menu из паузы завершают/перезапускают сессию |
 | 2026-06-14 | Терминальный guard в `handle_event`: при victory/game_over только ENTER→меню | завершает жизненный цикл и попутно чинит латентный недочёт (на мёртвом экране принимались стрельба/инвентарь — `update` был заморожен, а `handle_event` нет) |
+| 2026-06-14 | Кислота босса (9E) — переиспользование `AcidBullet`, без нового класса снаряда | `AcidBullet` уже существует и подходит (контракт Bullet, `origin_tag='enemy'` не бьёт врагов/босса, бьёт игрока); ввод нового снаряда нарушил бы «не вводить новую систему снарядов» |
+| 2026-06-14 | `BOSS_ACID_*` в `settings.py`, а не BossData/JSON | CLAUDE.md: константы в settings + запрет магии; все `BOSS_*` уже там; задача запрещает BossData/JSON-конфиг босса → settings единственный совместимый дом (4-е изменение обосновано) |
+| 2026-06-14 | Спец-атака — зеркало `SpitterZombie` на `PatientZeroBoss` (`_pending_bullets`/`collect_spawned_bullets`), не вынос в общий базовый класс | запрет рефакторинга Zombie и выноса логики; босс уже дублирует AI-хелперы зомби осознанно (9D) — кислота следует тому же решению; `Boss`-база не трогается |
+| 2026-06-14 | Отдельный `_acid_timer` параллельно `_attack_timer`; гейт `is_alive and phase==2 and can_spit` | отдельный кулдаун кислоты не связан с melee; `is_alive` не даёт «трупу» (0%HP→phase2 по `percentage`) выстрелить при прямом вызове update; melee 9D остаётся без изменений |
+| 2026-06-14 | Сбор пуль босса — одна строка в `GameScreen.update` после `boss.update` (как для зомби) | босс обновлялся отдельно от `_enemies` и его `collect_spawned_bullets` не вызывался; минимальная интеграция в существующий поток, CombatSystem не меняется |
+| 2026-06-14 | Призыв миньонов (9F) — инъекция `EnemyData` (walker) в `PatientZeroBoss(minion_config=None)`, босс строит реальные `WalkerZombie` | `WalkerZombie` требует `EnemyData`; загрузка JSON в `entities/` нарушила бы слои. Инъекция готового dataclass — без BossData/JSON в entity-слое и без нового типа миньона. Дефолт None → юнит-тесты `PatientZeroBoss(x,y,hp)` целы. Цикла импорта нет (zombie не зависит от boss) |
+| 2026-06-14 | Лимит призыва — счёт живых ссылок `_summoned` (`_active_minions`), не счётчик/событие | лимит «одновременно живых» требует видеть гибель; общие ссылки с `_enemies` дают `m.active` без EventBus; слот сам освобождается при смерти миньона |
+| 2026-06-14 | Сбор миньонов — `self._enemies.extend(boss.collect_spawned_minions())` после `boss.update` | паттерн `collect_spawned_bullets`; новые враги попадают в существующий поток (update/draw/combat-targets/очистка/XP) без новой системы спавна |
+| 2026-06-14 | Кислота и призыв — общий гейт `is_alive and phase==2`, каждый со своим кулдауном | оба — способности фазы 2; единый гейт читаем и не даёт «трупу» (0%HP→phase2) действовать; melee 9D ниже не тронут |
 
 ---
 

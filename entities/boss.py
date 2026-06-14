@@ -3,7 +3,15 @@ from __future__ import annotations
 import pygame
 
 from core.entity import Entity
+from data.enemy_data import EnemyData
+from entities.bullet import AcidBullet, Bullet
+from entities.zombie import WalkerZombie, Zombie
 from settings import (
+    BOSS_ACID_COOLDOWN,
+    BOSS_ACID_DAMAGE,
+    BOSS_ACID_RANGE,
+    BOSS_ACID_SIZE,
+    BOSS_ACID_SPEED,
     BOSS_ATTACK_COOLDOWN,
     BOSS_ATTACK_RANGE,
     BOSS_DAMAGE,
@@ -12,6 +20,8 @@ from settings import (
     BOSS_PHASE2_HEALTH_FRACTION,
     BOSS_PHASE2_SPEED_MULTIPLIER,
     BOSS_SPEED,
+    BOSS_SUMMON_COOLDOWN,
+    BOSS_SUMMON_MAX,
     TILE_SIZE,
 )
 from systems.event_bus import EventBus
@@ -77,9 +87,24 @@ class PatientZeroBoss(Boss):
     COLOR = (150, 20, 90)
     _SIZE: int = TILE_SIZE * 2  # босс крупнее обычных врагов; размер из settings, не магия
 
-    def __init__(self, x: float, y: float, max_health: int) -> None:
+    def __init__(
+        self,
+        x: float,
+        y: float,
+        max_health: int,
+        minion_config: EnemyData | None = None,
+    ) -> None:
         super().__init__(x, y, max_health, self._SIZE, self._SIZE)
         self._attack_timer: float = 0.0
+        self._acid_timer: float = 0.0
+        self._summon_timer: float = 0.0
+        self._pending_bullets: list[Bullet] = []
+        # Конфиг призываемого миньона (инъекция из GameScreen). None → босс не призывает,
+        # поэтому юнит-тесты `PatientZeroBoss(x, y, hp)` работают без изменений.
+        self._minion_config: EnemyData | None = minion_config
+        self._pending_minions: list[Zombie] = []
+        # Ссылки на призванных — для учёта лимита одновременно живых (active).
+        self._summoned: list[Zombie] = []
 
     # ── фазы ───────────────────────────────────────────────────────────────
 
@@ -105,6 +130,22 @@ class PatientZeroBoss(Boss):
         """Готов ли босс к атаке (кулдаун истёк)."""
         return self._attack_timer <= 0.0
 
+    @property
+    def can_spit(self) -> bool:
+        """Готов ли босс к кислотному плевку (отдельный кулдаун истёк)."""
+        return self._acid_timer <= 0.0
+
+    @property
+    def can_summon(self) -> bool:
+        """Готов ли босс призвать миньона: есть конфиг, кулдаун истёк, лимит живых не достигнут."""
+        if self._minion_config is None or self._summon_timer > 0.0:
+            return False
+        return self._active_minions() < BOSS_SUMMON_MAX
+
+    def _active_minions(self) -> int:
+        """Число ещё живых призванных миньонов (для лимита одновременности)."""
+        return sum(1 for m in self._summoned if m.active)
+
     # ── AI (структура как у Zombie.update_ai) ──────────────────────────────
 
     def update(
@@ -119,10 +160,23 @@ class PatientZeroBoss(Boss):
         вызывается как обычный враг: `boss.update(dt, walls, player)`.
         """
         self._attack_timer = max(0.0, self._attack_timer - dt)
+        self._acid_timer = max(0.0, self._acid_timer - dt)
+        self._summon_timer = max(0.0, self._summon_timer - dt)
         if player is None:
             return
 
         player_pos = player.pos
+        # Phase 2 (только живой босс): кислота и призыв миньонов, каждый по своему
+        # кулдауну. Гейт is_alive не даёт «мёртвому» боссу (0% HP → phase 2) действовать,
+        # если update вызван после гибели. Melee ниже не меняется.
+        if self.is_alive and self.phase == 2:
+            if self.can_spit:
+                self.spit_acid(player)
+                self._acid_timer = BOSS_ACID_COOLDOWN
+            if self.can_summon:
+                self.summon_minion()
+                self._summon_timer = BOSS_SUMMON_COOLDOWN
+
         if self._in_attack_range(player_pos):
             if self.can_attack:
                 self.attack(player)
@@ -133,6 +187,53 @@ class PatientZeroBoss(Boss):
     def attack(self, target: Entity) -> None:
         """Ближняя атака: урон по цели через её HealthComponent (как melee-зомби)."""
         target.take_damage(BOSS_DAMAGE)
+
+    def spit_acid(self, target: Entity) -> None:
+        """Кислотный плевок в направлении цели (Phase 2), зеркало SpitterZombie.attack.
+
+        Снаряд — существующий AcidBullet с origin_tag='enemy' (CombatSystem не даст ему
+        бить врагов/босса). Кладётся в очередь, которую сливает collect_spawned_bullets.
+        Нулевое направление (цель в точке босса) — нет-оп.
+        """
+        direction = target.pos - self.pos
+        if direction.length_squared() == 0:
+            return
+        direction.normalize_ip()
+        bullet = AcidBullet(
+            x=self.pos.x,
+            y=self.pos.y,
+            velocity=direction * BOSS_ACID_SPEED,
+            damage=BOSS_ACID_DAMAGE,
+            max_range=BOSS_ACID_RANGE,
+            size=BOSS_ACID_SIZE,
+            origin_tag="enemy",
+        )
+        self._pending_bullets.append(bullet)
+
+    def collect_spawned_bullets(self) -> list[Bullet]:
+        """Возвращает накопленные кислотные снаряды и очищает очередь (как SpitterZombie)."""
+        bullets: list[Bullet] = list(self._pending_bullets)
+        self._pending_bullets = []
+        return bullets
+
+    def summon_minion(self) -> None:
+        """Призвать заражённого (WalkerZombie) рядом с боссом (Phase 2).
+
+        Использует существующий тип врага и инъецированный конфиг — новых типов миньонов /
+        BossData / JSON не вводится. Ссылка хранится для учёта лимита живых; очередь сливает
+        collect_spawned_minions (паттерн collect_spawned_bullets). Нет-оп без конфига.
+        """
+        if self._minion_config is None:
+            return
+        minion = WalkerZombie(self.pos.x + TILE_SIZE, self.pos.y, self._minion_config)
+        self._pending_minions.append(minion)
+        self._summoned.append(minion)
+
+    def collect_spawned_minions(self) -> list[Zombie]:
+        """Возвращает призванных с последнего вызова миньонов и очищает очередь."""
+        minions: list[Zombie] = list(self._pending_minions)
+        self._pending_minions = []
+        return minions
 
     # ── вспомогательные (зеркало Zombie) ───────────────────────────────────
 

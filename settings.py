@@ -27,6 +27,17 @@ BOSS_DAMAGE: float = 20.0
 BOSS_PHASE2_HEALTH_FRACTION: float = 0.5
 BOSS_PHASE2_SPEED_MULTIPLIER: float = 1.5
 BOSS_PHASE2_COOLDOWN_MULTIPLIER: float = 0.6
+# Кислотная спец-атака фазы 2 (Sprint 9E). Отдельный кулдаун; минимальные
+# функциональные значения, не балансировка. Снаряд — существующий AcidBullet.
+BOSS_ACID_COOLDOWN: float = 2.5
+BOSS_ACID_DAMAGE: float = 15.0
+BOSS_ACID_SPEED: float = 260.0
+BOSS_ACID_RANGE: float = 500.0
+BOSS_ACID_SIZE: int = 8
+# Призыв миньонов фазы 2 (Sprint 9F). Отдельный кулдаун и лимит одновременно живых;
+# миньоны — существующий WalkerZombie, без новых типов/BossData/JSON.
+BOSS_SUMMON_COOLDOWN: float = 6.0
+BOSS_SUMMON_MAX: int = 3
 
 # Тайлы
 TILE_SIZE: int = 32

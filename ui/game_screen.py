@@ -155,6 +155,8 @@ class GameScreen(BaseScreen):
 
         if self._boss.active:
             self._boss.update(dt, walls, self._player)
+            self._combat.add_bullets(self._boss.collect_spawned_bullets())
+            self._enemies.extend(self._boss.collect_spawned_minions())
 
         self._combat.update(dt, walls, [*self._enemies, self._player, self._boss])
 
@@ -216,7 +218,12 @@ class GameScreen(BaseScreen):
         из `settings.BOSS_MAX_HEALTH` (конфигурируемая константа, не магическое число).
         """
         ts = TILE_SIZE
-        return PatientZeroBoss(43 * ts + ts / 2, 18 * ts + ts / 2, BOSS_MAX_HEALTH)
+        # Конфиг призываемых миньонов (Sprint 9F): существующий walker из enemies.json,
+        # инъецируется боссу — без BossData/JSON в entity-слое.
+        minion_config = self._load_enemy_configs()["walker"]
+        return PatientZeroBoss(
+            43 * ts + ts / 2, 18 * ts + ts / 2, BOSS_MAX_HEALTH, minion_config
+        )
 
     def _on_boss_defeated(self, data: dict[str, Any]) -> None:
         """Установить победное состояние при гибели босса (EventBus `boss_defeated`)."""
