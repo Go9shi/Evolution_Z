@@ -66,11 +66,18 @@ class Game:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self._running = False
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                # Quit only when no overlay (e.g. SkillTreeUI) is on top of the base screen.
-                # If depth > 1, ESC is passed to the current screen which handles closing itself.
-                if self.state_manager.depth <= 1:
+                continue
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                # ESC отдаётся активному экрану: Main Menu игнорирует его, GameScreen
+                # открывает паузу (push → depth растёт), оверлеи закрываются (pop).
+                # Приложение завершается лишь если ESC нажат на корневом экране и тот
+                # НЕ открыл ничего сверху (т.е. Main Menu), иначе пауза/закрытие оверлея.
+                at_root = self.state_manager.depth <= 1
+                if state:
+                    state.handle_event(event)
+                if at_root and self.state_manager.depth <= 1:
                     self._running = False
+                continue
             if state:
                 state.handle_event(event)
 

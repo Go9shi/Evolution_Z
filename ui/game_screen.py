@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Callable, cast
 
 import pygame
 
@@ -47,8 +47,13 @@ class GameScreen(BaseScreen):
     # Единый файл быстрого сохранения (без слотов).
     _SAVE_PATH: Path = SAVES_DIR / "savegame.json"
 
-    def __init__(self, state_manager: Any = None) -> None:
+    def __init__(
+        self, state_manager: Any = None, on_quit: Callable[[], None] | None = None
+    ) -> None:
         self._state_manager = state_manager
+        # Колбэк завершения приложения (из Main Menu). По умолчанию нет-оп — тесты,
+        # создающие GameScreen напрямую, не обязаны его передавать.
+        self._on_quit: Callable[[], None] = on_quit if on_quit is not None else (lambda: None)
         self._world = GameWorld()
         self._player = Player(self._START_X, self._START_Y, self._load_player_config())
         self._player.equip(Pistol(self._load_weapon_config("pistol")))
@@ -92,8 +97,15 @@ class GameScreen(BaseScreen):
         return self._game_over
 
     def handle_event(self, event: pygame.event.Event) -> None:
-        """ЛКМ — выстрел. F — предмет. I — инвентарь. Tab — навыки. J — квесты. L — лор. T — диалог. F5 — сохранить. F9 — загрузить."""
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+        """ESC — пауза. ЛКМ — выстрел. F — предмет. I — инвентарь. Tab — навыки. J — квесты. L — лор. T — диалог. F5 — сохранить. F9 — загрузить. На терминальном экране ENTER — в меню."""
+        if self._victory or self._game_over:
+            # Терминальный экран: активен только возврат в меню (ENTER); прочий ввод игнорируется.
+            if event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
+                self._return_to_main_menu()
+            return
+        if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+            self._open_pause_menu()
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mouse_world = pygame.Vector2(event.pos) + self._camera.offset
             direction = mouse_world - self._player.pos
             bullets = self._player.fire(direction)
@@ -209,6 +221,38 @@ class GameScreen(BaseScreen):
     def _on_boss_defeated(self, data: dict[str, Any]) -> None:
         """Установить победное состояние при гибели босса (EventBus `boss_defeated`)."""
         self._victory = True
+
+    # ── session lifecycle (Sprint 10G) ──────────────────────────────────────
+
+    def _open_pause_menu(self) -> None:
+        """ESC во время игры: открыть оверлей паузы поверх GameScreen (стек экранов)."""
+        if self._state_manager is None:
+            return
+        from ui.pause_menu import PauseMenuScreen
+        self._state_manager.push(
+            PauseMenuScreen(
+                on_resume=self._state_manager.pop,
+                on_save=self._save_game,
+                on_main_menu=self._return_to_main_menu,
+                on_quit=self._on_quit,
+            )
+        )
+
+    def _return_to_main_menu(self) -> None:
+        """Завершить сессию и вернуться в Main Menu (пункт паузы и ENTER на терминале).
+
+        Снимает со стека оверлей паузы (если открыт) и сам GameScreen — каждый pop зовёт
+        cleanup(), поэтому подписки EventBus не утекают, — затем кладёт свежий
+        MainMenuScreen. Единственный путь возврата; терминальные экраны используют его же.
+        """
+        if self._state_manager is None:
+            return
+        from ui.main_menu import MainMenuScreen
+        while not self._state_manager.is_empty and self._state_manager.current is not self:
+            self._state_manager.pop()
+        if self._state_manager.current is self:
+            self._state_manager.pop()
+        self._state_manager.push(MainMenuScreen(self._state_manager, self._on_quit))
 
     # ── save / load (Sprint 10B) ────────────────────────────────────────────
 

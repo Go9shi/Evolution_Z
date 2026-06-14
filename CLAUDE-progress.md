@@ -8,8 +8,8 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 10F — EventBus Cleanup ✅ (teardown GameScreen; нет накопления подписчиков на F9/New Game/Continue)  
-**Дата последнего обновления:** 2026-06-12
+**Спринт:** 10G — Pause Menu ✅ (ESC→пауза; Resume/Save/Main Menu/Quit; выход из Game Over/Victory в меню)  
+**Дата последнего обновления:** 2026-06-14
 
 ---
 
@@ -500,6 +500,23 @@
 - [x] QuestSystem/Player НЕ модифицированы: их bound-методы снимаются через `EventBus.off` из GameScreen (равенство bound-методов позволяет `list.remove`)
 - [x] `tests/test_eventbus_cleanup.py` — 17 тестов
 
+### Спринт 10G — Pause Menu / завершение жизненного цикла сессии ✅ (завершён)
+Цель: устранить игровые тупики (ESC убивал приложение; из Game Over/Victory нет выхода) и дать штатный Save через UI. Минимальный вертикальный срез на существующем стеке экранов, без новых менеджеров/систем/данных.
+- [x] `ui/pause_menu.py` (был пустой стаб) — `PauseMenuScreen`: оверлей Resume/Save Game/Main Menu/Quit; UP/DOWN (циклически), ENTER, ESC→Resume. Стиль MainMenu + полупрозрачный overlay (как SkillTreeUI/QuestLogUI). Не владеет логикой — 4 колбэка (паттерн `on_close`)
+- [x] `ui/game_screen.py` — опц. параметр `on_quit` (default нет-оп → тесты не ломаются); ESC→`_open_pause_menu` (push PauseMenuScreen); `_return_to_main_menu` (снимает оверлей+GameScreen через pop→cleanup, push свежий MainMenuScreen); терминальный guard в `handle_event`: при victory/game_over активен только ENTER→`_return_to_main_menu`, прочий ввод игнорируется
+- [x] `ui/game_screen.py` — Save из паузы идёт через существующий `_save_game` (тот же путь, что F5) — без дублирования save-логики
+- [x] `main.py` — ESC делегируется активному экрану; приложение завершается лишь если ESC нажат на корневом экране И тот не открыл оверлей (`at_root до` и `depth<=1 после`). Main Menu (ESC→quit) не менялся; GameScreen открывает паузу, оверлеи закрываются — без выхода
+- [x] `ui/main_menu.py` — проброс `self._on_quit` в `GameScreen(...)` (New Game/Continue), чтобы Quit/Main Menu из паузы работали
+- [x] `tests/test_pause_menu.py` — 25 тестов
+- [x] Headless smoke: New Game→ESC→пауза→Resume; пауза→Main Menu; Game Over→ENTER→Main Menu; Quit→колбэк. Все переходы и глубины стека верны
+
+### Тесты — 797 тестов, все зелёные ✅ (после Спринта 10G)
++25 тестов в `tests/test_pause_menu.py`:
+- PauseMenu (unit): BaseScreen; стартовый индекс; UP/DOWN циклически (4 пункта); игнор не-KEYDOWN; ENTER на каждом пункте зовёт свой колбэк; ESC→Resume; draw/update без падения
+- Интеграция GameScreen↔пауза: ESC открывает PauseMenu (depth 2); Resume возвращает в игру (depth 1); Save Game пишет файл (фикстура `save_path`); Main Menu → MainMenuScreen (depth 1); Quit зовёт `on_quit`; `state_manager is None` безопасен
+- Терминальные состояния: Game Over+ENTER→Main Menu; Victory+ENTER→Main Menu; терминал игнорирует прочий ввод (I, ЛКМ)
+- Регрессии/утечки: возврат в меню снимает все подписки EventBus (→0); терминальный выход тоже (→0); повторные сессии не копят подписчиков
+
 ### Тесты — 772 теста, все зелёные ✅ (после Спринта 10F)
 +17 тестов в `tests/test_eventbus_cleanup.py`:
 - Подписки: GameScreen регистрирует 6; entity_died имеет 2 слушателя
@@ -557,6 +574,7 @@
 - [x] Интеграция SaveSystem в GameScreen (10B): F5 — сохранить, F9 — загрузить, один файл
 - [ ] Слоты сохранений, меню сохранений — будущий спринт
 - [x] `ui/main_menu.py` — главное меню (10E): New Game / Continue / Quit, один файл сейва (слоты — будущее)
+- [x] `ui/pause_menu.py` — меню паузы (10G): ESC→Resume/Save Game/Main Menu/Quit; выход из Game Over/Victory в меню по ENTER
 - [ ] `systems/audio.py` — SFX и музыка
 - [x] Game Over (10D): поражение при смерти игрока + заморозка victory/game_over в `update`; «GAME OVER» оверлей
 - [x] HUD (10C): HP-бар, бар голода, уровень/XP, трекер квестов (`ui/hud.py`); миникарта — отложена
@@ -691,6 +709,11 @@
 | 2026-06-14 | GameScreen снимает подписки Player/QuestSystem через `EventBus.off(bound_method)`, не модифицируя их | QuestSystem (Quest) — в списке «не трогать»; равенство bound-методов (`==` по instance+func) позволяет `list.remove` найти и снять; GameScreen — владелец этих объектов, он же управляет их жизненным циклом подписок |
 | 2026-06-14 | F9 `load_game` снимает подписки СТАРЫХ player/quest перед swap | повторная загрузка: `_fresh_systems` добавляет +2 подписки, detach старых −2 → счётчик стабилен; GameScreen-подписки (4) не трогаются (экран жив) |
 | 2026-06-14 | `cleanup` идемпотентен (флаг `_cleaned`) | защита от двойного `off` (ValueError из `list.remove`) при cleanup + последующем pop того же экрана; EventBus не трогаем |
+| 2026-06-14 | PauseMenu (10G) — push поверх GameScreen (стек), 4 колбэка вместо ссылки на GameScreen | паттерн `on_close` проекта (overlays получают систему + колбэк); без импорта GameScreen → нет цикла, тривиально мокается; Save = `_save_game` (путь F5), не дублирует SaveSystem |
+| 2026-06-14 | Единый `_return_to_main_menu` для пункта паузы и терминального ENTER | один путь возврата (требование «не делать отдельную реализацию»); снимает оверлей паузы (если есть) и GameScreen через `pop`→`cleanup` → подписки не текут; устойчив к обеим высотам стека (цикл `while current is not self`) |
+| 2026-06-14 | ESC-выход вынесен из `main.py` в делегирование экрану; quit лишь если корневой экран не открыл оверлей (`at_root до` + `depth<=1 после`) | GameScreen перехватывает ESC (пауза, depth↑→нет quit); оверлеи закрываются (pop); Main Menu не изменён (ESC игнорирует → depth не растёт → quit). Альтернатива (ESC-обработчик в MainMenu) запрещена правилом «не рефакторить Main Menu» |
+| 2026-06-14 | `GameScreen.on_quit` опционален (default нет-оп); проброшен из MainMenu (New Game/Continue) | существующие тесты создают GameScreen без on_quit — не ломаются; реальная игра прокидывает `Game.stop` → Quit/Main Menu из паузы завершают/перезапускают сессию |
+| 2026-06-14 | Терминальный guard в `handle_event`: при victory/game_over только ENTER→меню | завершает жизненный цикл и попутно чинит латентный недочёт (на мёртвом экране принимались стрельба/инвентарь — `update` был заморожен, а `handle_event` нет) |
 
 ---
 

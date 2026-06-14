@@ -94,14 +94,14 @@ class MainMenuScreen(BaseScreen):
         if self._state_manager is None:
             return
         self._state_manager.pop()
-        self._state_manager.push(GameScreen(self._state_manager))
+        self._state_manager.push(GameScreen(self._state_manager, self._on_quit))
 
     def _continue(self) -> None:
         """Продолжить: при наличии сейва открыть GameScreen и восстановить состояние."""
         if self._state_manager is None or not self._has_save():
             return
         self._state_manager.pop()
-        screen = GameScreen(self._state_manager)
+        screen = GameScreen(self._state_manager, self._on_quit)
         self._state_manager.push(screen)
         screen.load_game()
 
