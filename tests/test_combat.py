@@ -77,7 +77,8 @@ def test_weapon_config_fields(pistol_config: WeaponConfig) -> None:
 
 def test_weapon_config_is_dataclass(pistol_config: WeaponConfig) -> None:
     from dataclasses import fields
-    assert len(fields(pistol_config)) == 5
+    # 5 базовых полей + 2 дефолтных для дробовика (Sprint 10B): pellet_count, spread_degrees.
+    assert len(fields(pistol_config)) == 7
 
 
 # ── Bullet ─────────────────────────────────────────────────────────────────

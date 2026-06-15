@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 10A — Boss Patrol Outside Combat ✅ (босс патрулирует точки вокруг спавна, пока игрок не обнаружен)  
+**Спринт:** 10B — Weapons Polymorphism & Release Coherence ✅ (Rifle + Shotgun через существующую иерархию Weapon; пустые стабы закрыты)  
 **Дата последнего обновления:** 2026-06-14
 
 ---
@@ -500,6 +500,25 @@
 - [x] QuestSystem/Player НЕ модифицированы: их bound-методы снимаются через `EventBus.off` из GameScreen (равенство bound-методов позволяет `list.remove`)
 - [x] `tests/test_eventbus_cleanup.py` — 17 тестов
 
+### Спринт 10B — Weapons Polymorphism & Release Coherence ✅ (завершён)
+(Не путать с ранним «10B — Save Integration». Имя задано постановкой; weapons-трек.)
+Цель: реализовать Rifle и Shotgun через существующую оружейную иерархию — закрыть пустые стабы и усилить демонстрацию наследования/полиморфизма. Без изменений архитектуры.
+- [x] Анализ: `Weapon(ABC)` с абстрактным `fire`; `Pistol(Weapon)` — одиночный выстрел; `WeaponConfig` из `weapons.json`; путь ЛКМ→`Player.fire`→`Weapon.fire`→`CombatSystem`. Бонус урона навыка работает для любого `Weapon` через `add_damage_bonus`
+- [x] `data/weapon_config.py`: +`pellet_count: int = 1`, `spread_degrees: float = 0.0` (дефолты → обратная совместимость; pistol/rifle грузятся без новых ключей)
+- [x] `assets/data/weapons.json`: +`rifle` (fire_rate 6.0 > pistol 2.0; damage 12 < 25), +`shotgun` (pellet_count 6, spread 30°, низкая скорострельность)
+- [x] `entities/weapons/rifle.py` (был пуст): `Rifle(Weapon)` — одиночная пуля, отличие в параметрах конфига
+- [x] `entities/weapons/shotgun.py` (был пуст): `Shotgun(Weapon)` — переопределяет `fire()`, веер `pellet_count` дробинок через существующий `Bullet`, без изменений CombatSystem
+- [x] Доступны в конфигурации (`weapons.json`) и конструируемы; GameScreen-архитектура и стартовый Pistol не тронуты
+- [x] `tests/test_weapons.py` — 20 тестов; обновлён 1 существующий (`test_combat.test_weapon_config_is_dataclass`: 5→7 полей)
+- [x] Headless smoke: pistol 1 / rifle 1 / shotgun 6 пуль; Player+Shotgun → 6 пуль в CombatSystem; кулдаун блокирует второй залп
+
+### Тесты — 893 теста, все зелёные ✅ (после Спринта 10B оружия)
++20 тестов в `tests/test_weapons.py`:
+- Совместимость конфига: 5-полевой конфиг валиден (дефолты); все три оружия грузятся из json
+- Rifle: is-a Weapon; одиночная пуля; origin=player; нулевое направление — нет-оп; кулдаун после выстрела и восстановление; бонус урона; fire_rate > pistol; damage < pistol
+- Shotgun: is-a Weapon; несколько дробинок (==pellet_count); разброс (разные направления); все origin=player; урон дробинки из конфига; нулевое направление — нет-оп; кулдаун блокирует залп и восстанавливается
+- Полиморфизм: единый вызов `Weapon.fire` для Pistol/Rifle/Shotgun
+
 ### Спринт 10A — Boss Patrol Outside Combat ✅ (завершён)
 (Boss-трек; не путать с ранним «10A — Save System». Имя спринта задано постановкой.)
 Цель: пока игрок не обнаружен, босс патрулирует точки вокруг спавна; обнаружение немедленно прекращает патруль, потеря игрока — возобновляет. Только `settings.py` + `entities/boss.py`, без новых систем/singleton.
@@ -808,6 +827,10 @@
 | 2026-06-14 | Патруль (10A) — точки вокруг якоря (spawn), ветка `else` в `update`, по образцу `Zombie._patrol` | существующий паттерн; обнаружение в `if/elif` выше немедленно прерывает патруль, потеря игрока → `else` снова; спецатаки/melee/фазы не тронуты |
 | 2026-06-14 | Патруль активен только при игроке≠None (не обнаружен); `player is None` — ранний выход | сохраняет семантику `test_no_player_is_safe`; в реальной игре игрок всегда есть, патруль работает; мёртвый босс не патрулирует (GameScreen зовёт update лишь при `_boss.active`) |
 | 2026-06-14 | Патруль переиспользует `_move_toward` со сниженной скоростью (`dt*BOSS_PATROL_SPEED_FACTOR`) | без дублирования логики коллизий стен; зеркало `Zombie._patrol` (`dt*0.5`); патруль уважает стены |
+| 2026-06-14 | Rifle/Shotgun (10B) — прямые подклассы `Weapon`, не `Pistol` | задача: «наследуется от Weapon»; плоская иерархия `Weapon→{Pistol,Rifle,Shotgun}` чище демонстрирует полиморфизм; одиночный выстрел Rifle совпадает по форме с Pistol (осознанное мелкое дублирование, как у Boss/Zombie-хелперов) |
+| 2026-06-14 | Параметры дробовика — поля `WeaponConfig` с дефолтами (`pellet_count=1`, `spread_degrees=0`), а не settings | данные оружия живут в JSON (CLAUDE.md); дефолты сохраняют обратную совместимость pistol/rifle и существующих фикстур `WeaponConfig(...)`; без новой dataclass |
+| 2026-06-14 | Оружие доступно «в конфигурации» (weapons.json), не привязано к вводу GameScreen | ограничение «не менять GameScreen-архитектуру»; полиморфизм демонстрируется классами+тестами; переключение оружия по клавишам — вне скоупа (см. остаточные риски) |
+| 2026-06-14 | `test_weapon_config_is_dataclass` 5→7 полей — перенацелен, не ослаблен | dataclass легитимно получил 2 поля; тест отражает новый контракт, остальные `WeaponConfig(...)` целы благодаря дефолтам |
 
 ---
 
