@@ -41,6 +41,11 @@ BOSS_SUMMON_MAX: int = 3
 # Награда XP за финального босса (Sprint 9G). Идёт существующим путём
 # GameScreen._on_entity_died (entity.xp_reward), без новой системы наград.
 BOSS_XP_REWARD: int = 200
+# Патруль вне боя (Sprint 10A). Босс ходит по точкам вокруг точки спавна, пока
+# игрок не обнаружен; скорость снижена множителем (как у Zombie._patrol: dt*0.5).
+BOSS_PATROL_RADIUS: float = 96.0
+BOSS_PATROL_SPEED_FACTOR: float = 0.5
+BOSS_PATROL_ARRIVE_DIST: float = 8.0
 
 # Тайлы
 TILE_SIZE: int = 32

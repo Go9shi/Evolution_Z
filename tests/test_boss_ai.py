@@ -78,15 +78,16 @@ class TestChase:
             boss.update(0.1, [], player)
         assert boss.pos.distance_to(player.pos) < start
 
-    def test_does_not_move_when_player_out_of_range(self) -> None:
+    def test_patrols_when_player_out_of_range(self) -> None:
+        # Sprint 10A: вне обнаружения босс не стоит, а патрулирует (двигается).
         boss = make_boss(300.0, 300.0)
         player = make_player(3000.0, 3000.0)  # далеко за радиусом обнаружения
         boss.update(0.1, [], player)
-        assert boss.pos == pygame.Vector2(300.0, 300.0)
+        assert boss.pos != pygame.Vector2(300.0, 300.0)
 
     def test_no_player_is_safe(self) -> None:
         boss = make_boss(300.0, 300.0)
-        boss.update(0.1, [], None)  # не должно падать
+        boss.update(0.1, [], None)  # без игрока — не патрулирует и не падает
         assert boss.pos == pygame.Vector2(300.0, 300.0)
 
 

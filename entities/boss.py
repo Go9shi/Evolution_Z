@@ -16,6 +16,9 @@ from settings import (
     BOSS_ATTACK_RANGE,
     BOSS_DAMAGE,
     BOSS_DETECTION_RANGE,
+    BOSS_PATROL_ARRIVE_DIST,
+    BOSS_PATROL_RADIUS,
+    BOSS_PATROL_SPEED_FACTOR,
     BOSS_PHASE2_COOLDOWN_MULTIPLIER,
     BOSS_PHASE2_HEALTH_FRACTION,
     BOSS_PHASE2_SPEED_MULTIPLIER,
@@ -107,6 +110,17 @@ class PatientZeroBoss(Boss):
         self._pending_minions: list[Zombie] = []
         # Ссылки на призванных — для учёта лимита одновременно живых (active).
         self._summoned: list[Zombie] = []
+        # Патруль вне боя (Sprint 10A): несколько точек вокруг точки спавна (якоря).
+        # Якорь фиксируется на старте — до любого движения. Точки обходятся циклически.
+        r = BOSS_PATROL_RADIUS
+        self._patrol_anchor: pygame.Vector2 = pygame.Vector2(self.pos)
+        self._patrol_points: list[pygame.Vector2] = [
+            pygame.Vector2(r, 0.0),
+            pygame.Vector2(0.0, r),
+            pygame.Vector2(-r, 0.0),
+            pygame.Vector2(0.0, -r),
+        ]
+        self._patrol_index: int = 0
 
     # ── фазы ───────────────────────────────────────────────────────────────
 
@@ -186,6 +200,10 @@ class PatientZeroBoss(Boss):
                 self._attack_timer = self.attack_cooldown
         elif self._detect_player(player_pos):
             self._move_toward(player_pos, walls or [], dt)
+        else:
+            # Игрок не обнаружен → патруль вне боя. Любое обнаружение выше немедленно
+            # прерывает патруль (ветки melee/chase), потеря игрока — снова сюда.
+            self._patrol(walls or [], dt)
 
     def attack(self, target: Entity) -> None:
         """Ближняя атака: урон по цели через её HealthComponent (как melee-зомби)."""
@@ -240,6 +258,23 @@ class PatientZeroBoss(Boss):
         minions: list[Zombie] = list(self._pending_minions)
         self._pending_minions = []
         return minions
+
+    # ── патруль вне боя (Sprint 10A) ───────────────────────────────────────
+
+    @property
+    def patrol_target(self) -> pygame.Vector2:
+        """Текущая целевая точка патруля (якорь + смещение активной точки)."""
+        return self._patrol_anchor + self._patrol_points[self._patrol_index]
+
+    def _patrol(self, walls: list[pygame.Rect], dt: float) -> None:
+        """Движение к текущей точке патруля; по достижении — переход к следующей.
+
+        Скорость снижена `BOSS_PATROL_SPEED_FACTOR` (как у Zombie._patrol через dt*0.5),
+        переиспользует `_move_toward` (коллизии стен). Точки обходятся циклически.
+        """
+        if self.pos.distance_to(self.patrol_target) <= BOSS_PATROL_ARRIVE_DIST:
+            self._patrol_index = (self._patrol_index + 1) % len(self._patrol_points)
+        self._move_toward(self.patrol_target, walls, dt * BOSS_PATROL_SPEED_FACTOR)
 
     # ── вспомогательные (зеркало Zombie) ───────────────────────────────────
 
