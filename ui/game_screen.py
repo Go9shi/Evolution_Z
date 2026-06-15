@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, Callable
 
 import pygame
 
@@ -12,6 +12,7 @@ from data.lore_data import LoreEntry
 from data.player_data import PlayerData
 from data.quest_data import Quest
 from data.quest_loader import load_quests
+from data.spawn_point import SpawnPoint
 from data.spitter_data import SpitterData
 from data.weapon_config import WeaponConfig
 from entities.boss import PatientZeroBoss
@@ -20,7 +21,7 @@ from entities.items.quest_item import QuestItem
 from entities.player import Player
 from entities.weapons.pistol import Pistol
 from entities.zombie import RunnerZombie, SpitterZombie, WalkerZombie, Zombie
-from settings import BOSS_MAX_HEALTH, DATA_DIR, SAVES_DIR, SCREEN_H, SCREEN_W, TILE_SIZE
+from settings import BOSS_MAX_HEALTH, DATA_DIR, SAVES_DIR, SCREEN_H, SCREEN_W
 from systems.camera import Camera
 from systems.combat import CombatSystem
 from systems.dialogue import DialogueSystem
@@ -36,13 +37,16 @@ _ENEMY_CONSTRUCTORS: dict[str, type[EnemyData]] = {
     "spitter": SpitterData,
 }
 
+# Токен спавна enemy_* → (класс врага, ключ конфига в enemies.json). Sprint 11B.
+_ENEMY_SPAWNS: dict[str, tuple[type[Zombie], str]] = {
+    "enemy_walker": (WalkerZombie, "walker"),
+    "enemy_runner": (RunnerZombie, "runner"),
+    "enemy_spitter": (SpitterZombie, "spitter"),
+}
+
 
 class GameScreen(BaseScreen):
     """Главный игровой экран. Владеет миром, игроком, камерой, врагами и боевой системой."""
-
-    # Стартовая позиция игрока — центр комнаты 1 (tile 12, 6)
-    _START_X: float = 12 * TILE_SIZE + TILE_SIZE / 2
-    _START_Y: float = 6 * TILE_SIZE + TILE_SIZE / 2
 
     # Единый файл быстрого сохранения (без слотов).
     _SAVE_PATH: Path = SAVES_DIR / "savegame.json"
@@ -55,18 +59,22 @@ class GameScreen(BaseScreen):
         # создающие GameScreen напрямую, не обязаны его передавать.
         self._on_quit: Callable[[], None] = on_quit if on_quit is not None else (lambda: None)
         self._world = GameWorld()
-        self._player = Player(self._START_X, self._START_Y, self._load_player_config())
+        # Размещение всех игровых объектов — из object-слоя карты (Sprint 11B):
+        # GameScreen больше не хранит координат уровня.
+        spawns = self._world.spawns
+        self._player_start: tuple[float, float] = self._find_player_start(spawns)
+        self._player = Player(*self._player_start, self._load_player_config())
         self._player.equip(Pistol(self._load_weapon_config("pistol")))
         self._camera = Camera()
-        self._enemies: list[Zombie] = self._spawn_enemies()
-        self._boss: PatientZeroBoss = self._spawn_boss()
+        self._enemies: list[Zombie] = self._spawn_enemies(spawns)
+        self._boss: PatientZeroBoss = self._spawn_boss(spawns)
         self._victory: bool = False
         self._game_over: bool = False
         self._cleaned: bool = False
         self._font_victory = pygame.font.SysFont("monospace", 44, bold=True)
         self._hud = HUD()
         self._combat = CombatSystem()
-        self._world_items: list[Item] = self._spawn_items()
+        self._world_items: list[Item] = self._spawn_items(spawns)
         self._quest_system = QuestSystem(self._player.experience)
         # Квесты загружены в реестр, но не приняты: их выдаёт диалог (Sprint 8G).
         self._quests: dict[str, Quest] = {q.id: q for q in self._load_quests()}
@@ -194,36 +202,38 @@ class GameScreen(BaseScreen):
 
     # ── private helpers ────────────────────────────────────────────────────
 
-    def _spawn_enemies(self) -> list[Zombie]:
+    @staticmethod
+    def _find_player_start(spawns: list[SpawnPoint]) -> tuple[float, float]:
+        """Координаты старта игрока из карты (`player_start`); (0,0), если объект отсутствует."""
+        for sp in spawns:
+            if sp.name == "player_start":
+                return sp.x, sp.y
+        return 0.0, 0.0
+
+    def _spawn_enemies(self, spawns: list[SpawnPoint]) -> list[Zombie]:
+        """Создать врагов из точек спавна enemy_* (класс и конфиг — по токену имени)."""
         configs = self._load_enemy_configs()
-        w = configs["walker"]
-        r = configs["runner"]
-        s = cast(SpitterData, configs["spitter"])
-        ts = TILE_SIZE
-        return [
-            # Комната 2: два уокера
-            WalkerZombie(35 * ts + ts / 2, 6 * ts + ts / 2, w),
-            WalkerZombie(38 * ts + ts / 2, 8 * ts + ts / 2, w),
-            # Комната 3: один раннер
-            RunnerZombie(12 * ts + ts / 2, 17 * ts + ts / 2, r),
-            # Комната 4: один спиттер
-            SpitterZombie(37 * ts + ts / 2, 17 * ts + ts / 2, s),
-        ]
+        enemies: list[Zombie] = []
+        for sp in spawns:
+            entry = _ENEMY_SPAWNS.get(sp.name)
+            if entry is not None:
+                cls, key = entry
+                enemies.append(cls(sp.x, sp.y, configs[key]))
+        return enemies
 
-    def _spawn_boss(self) -> PatientZeroBoss:
-        """Создать финального босса.
+    def _spawn_boss(self, spawns: list[SpawnPoint]) -> PatientZeroBoss:
+        """Создать финального босса из точки спавна `boss` (координаты — из карты).
 
-        Минимальное решение: координаты спавна заданы инлайн (как у `_spawn_enemies`) —
-        интерьер Комнаты 4 (rows 15–20, cols 29–45), отдельно от спиттера. max_health —
-        из `settings.BOSS_MAX_HEALTH` (конфигурируемая константа, не магическое число).
+        max_health — из `settings.BOSS_MAX_HEALTH`; minion_config (Sprint 9F) — walker из
+        enemies.json (это конфиг, а не координата уровня). Если объекта boss нет — (0,0).
         """
-        ts = TILE_SIZE
-        # Конфиг призываемых миньонов (Sprint 9F): существующий walker из enemies.json,
-        # инъецируется боссу — без BossData/JSON в entity-слое.
         minion_config = self._load_enemy_configs()["walker"]
-        return PatientZeroBoss(
-            43 * ts + ts / 2, 18 * ts + ts / 2, BOSS_MAX_HEALTH, minion_config
-        )
+        x, y = 0.0, 0.0
+        for sp in spawns:
+            if sp.name == "boss":
+                x, y = sp.x, sp.y
+                break
+        return PatientZeroBoss(x, y, BOSS_MAX_HEALTH, minion_config)
 
     def _on_boss_defeated(self, data: dict[str, Any]) -> None:
         """Установить победное состояние при гибели босса (EventBus `boss_defeated`)."""
@@ -311,7 +321,7 @@ class GameScreen(BaseScreen):
 
     def _fresh_systems(self) -> tuple[Player, QuestSystem, LoreSystem]:
         """Построить чистые player/quest/lore для восстановления сохранения."""
-        player = Player(self._START_X, self._START_Y, self._load_player_config())
+        player = Player(*self._player_start, self._load_player_config())
         player.equip(Pistol(self._load_weapon_config("pistol")))
         quest_system = QuestSystem(player.experience)
         lore_system = LoreSystem()
@@ -414,22 +424,23 @@ class GameScreen(BaseScreen):
         with open(DATA_DIR / "items.json", encoding="utf-8") as f:
             return json.load(f)
 
-    def _spawn_items(self) -> list[Item]:
+    def _spawn_items(self, spawns: list[SpawnPoint]) -> list[Item]:
+        """Создать предметы из точек спавна с реальными item_id; категория — из items.json.
+
+        Токен спавна — реальный item_id (`canned_beans`/`ration_pack`/`vaccine_component_*`):
+        если он есть в секции food → FoodItem, в quest → QuestItem. Неизвестные id — пропуск.
+        """
         cfg = self._load_item_configs()
-        ts = TILE_SIZE
         food = cfg["food"]
         quest = cfg["quest"]
-        beans = food["canned_beans"]
-        ration = food["ration_pack"]
-        alpha = quest["vaccine_component_alpha"]
-        beta = quest["vaccine_component_beta"]
-        return [
-            # Комната 1: консервы рядом со стартом
-            FoodItem(15 * ts, 6 * ts, "canned_beans", beans["name"], beans["description"], beans["nutrition"]),
-            # Комната 2: паёк
-            FoodItem(37 * ts, 8 * ts, "ration_pack", ration["name"], ration["description"], ration["nutrition"]),
-            # Комната 3: первый компонент вакцины
-            QuestItem(14 * ts, 18 * ts, "vaccine_component_alpha", alpha["name"], alpha["description"]),
-            # Комната 4: второй компонент вакцины
-            QuestItem(39 * ts, 18 * ts, "vaccine_component_beta", beta["name"], beta["description"]),
-        ]
+        items: list[Item] = []
+        for sp in spawns:
+            if sp.name in food:
+                c = food[sp.name]
+                items.append(
+                    FoodItem(sp.x, sp.y, sp.name, c["name"], c["description"], c["nutrition"])
+                )
+            elif sp.name in quest:
+                c = quest[sp.name]
+                items.append(QuestItem(sp.x, sp.y, sp.name, c["name"], c["description"]))
+        return items

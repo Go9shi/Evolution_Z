@@ -3,6 +3,7 @@ from pathlib import Path
 import pygame
 import pytmx
 
+from data.spawn_point import SpawnPoint
 from settings import (
     MAPS_DIR,
     SCREEN_H,
@@ -18,8 +19,9 @@ WALL = 1
 _COLS = 50
 _ROWS = 24
 
-# Слой коллизий в TMX и карта уровня по умолчанию (Sprint 11A).
+# Слои TMX и карта уровня по умолчанию (Sprint 11A/11B).
 _COLLISION_LAYER = "collision"
+_SPAWNS_LAYER = "spawns"
 _DEFAULT_MAP: Path = MAPS_DIR / "level1.tmx"
 
 
@@ -32,6 +34,20 @@ def load_grid_from_tmx(map_path: Path) -> list[list[int]]:
     tmx = pytmx.TiledMap(str(map_path))
     layer = tmx.get_layer_by_name(_COLLISION_LAYER)
     return [[WALL if gid != 0 else FLOOR for gid in row] for row in layer.data]
+
+
+def load_spawns_from_tmx(map_path: Path) -> list[SpawnPoint]:
+    """Загрузить точки спавна из TMX object-слоя `spawns` (Sprint 11B).
+
+    Каждый объект → SpawnPoint(name, x, y) в абсолютных пикселях. Отсутствие слоя —
+    не ошибка (карта без объектов): возвращается пустой список.
+    """
+    tmx = pytmx.TiledMap(str(map_path))
+    try:
+        layer = tmx.get_layer_by_name(_SPAWNS_LAYER)
+    except ValueError:
+        return []
+    return [SpawnPoint(obj.name, float(obj.x), float(obj.y)) for obj in layer]
 
 
 def _build_grid() -> list[list[int]]:
@@ -119,11 +135,17 @@ class GameWorld:
         self._rows: int = len(self._grid)
         self._cols: int = len(self._grid[0]) if self._grid else 0
         self._wall_rects: list[pygame.Rect] = self._compute_wall_rects()
+        self._spawns: list[SpawnPoint] = load_spawns_from_tmx(map_path)
 
     @property
     def wall_rects(self) -> list[pygame.Rect]:
         """Список прямоугольников стен для проверки коллизий."""
         return self._wall_rects
+
+    @property
+    def spawns(self) -> list[SpawnPoint]:
+        """Точки спавна из object-слоя карты (player/enemies/boss/items)."""
+        return self._spawns
 
     @property
     def pixel_width(self) -> int:

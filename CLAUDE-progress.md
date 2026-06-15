@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 11A — TMX Geometry Pipeline (Phase 1) ✅ (геометрия уровня грузится из level1.tmx; API GameWorld неизменен)  
+**Спринт:** 11B — TMX Spawn Objects (Phase 2) ✅ (размещение player/enemies/boss/items из object-слоя TMX; GameScreen без координат уровня)  
 **Дата последнего обновления:** 2026-06-14
 
 ---
@@ -499,6 +499,24 @@
 - [x] `ui/game_screen.py` — `load_game` (F9): перед swap снимает подписки СТАРЫХ player/quest_system → повторные загрузки не копят обработчики
 - [x] QuestSystem/Player НЕ модифицированы: их bound-методы снимаются через `EventBus.off` из GameScreen (равенство bound-методов позволяет `list.remove`)
 - [x] `tests/test_eventbus_cleanup.py` — 17 тестов
+
+### Спринт 11B — TMX Spawn Objects (Phase 2) ✅ (завершён)
+Цель: перенести размещение игровых объектов (игрок/враги/босс/предметы) из захардкоженных координат `GameScreen` в TMX object-слой `spawns`. Завершает переход к data-driven level design. Только источник данных; игровые системы не менялись.
+- [x] Эмпирически проверено: pytmx читает object-слой (`.name`/`.x`/`.y` float); отсутствие слоя → `ValueError` (ловим → пустой список)
+- [x] `data/spawn_point.py` — `@dataclass SpawnPoint(name, x, y)` (слой data)
+- [x] `assets/maps/level1.tmx` — добавлен object-слой `spawns` с 10 точками (player_start / 2×enemy_walker / enemy_runner / enemy_spitter / boss / 4 item_id), координаты = прежним захардкоженным → паритет. Слой `collision` не тронут (паритет 11A сохранён)
+- [x] `systems/game_world.py` — `load_spawns_from_tmx(path)` + `GameWorld.spawns`. Контракт `wall_rects`/`draw`/`pixel_*` неизменен
+- [x] `ui/game_screen.py` — удалены `_START_X/_START_Y` и все координаты уровня (`_spawn_enemies`/`_spawn_boss`/`_spawn_items` строят из `self._world.spawns`); `_fresh_systems` (F9/load) берёт player_start из карты; маппинг `_ENEMY_SPAWNS` (токен→класс+конфиг). Реальные item_id (без выдуманного medkit — по инструкции спринта); категория (food/quest) — из items.json
+- [x] Не тронуты: CombatSystem/EventBus/SaveSystem/Entity/Weapon/Boss AI/Skill/Quest/Inventory/UI-flow. Удалены неиспользуемые импорты `cast`/`TILE_SIZE`
+- [x] `tests/test_game_world_spawns.py` — 14 тестов
+- [x] Smoke (New Game → spawns из TMX): player (400,208), 4 врага [Walker,Walker,Runner,Spitter], boss (1392,592), 4 предмета (2 food/2 quest), выстрел даёт пулю
+
+### Тесты — 916 тестов, все зелёные ✅ (после Спринта 11B)
++14 тестов в `tests/test_game_world_spawns.py`:
+- Загрузка спавнов: level1 даёт 10 точек; player_start/enemy_*/boss/item_id присутствуют; float-координаты; отсутствие слоя → пустой список
+- Интеграция GameScreen: игрок/враги(4)/босс/предметы(4: 2 food+2 quest) создаются из TMX в нужных координатах
+- Паритет: счётчики совпадают со старым уровнем
+- Кастомные карты: позиция игрока и число врагов задаются ТОЛЬКО TMX-файлом (Python не меняется)
 
 ### Спринт 11A — TMX Geometry Pipeline (Phase 1) ✅ (завершён)
 Цель: перевести источник геометрии уровня `_build_grid()` → `level1.tmx` → `wall_rects`, сохранив публичный API `GameWorld`. Только геометрия; спавны/NPC/триггеры/переходы/спрайты/аудио — вне скоупа (Phase 2+).
