@@ -1,12 +1,37 @@
-import pygame
+from pathlib import Path
 
-from settings import SCREEN_H, SCREEN_W, TILE_FLOOR_COLOR, TILE_SIZE, TILE_WALL_COLOR
+import pygame
+import pytmx
+
+from settings import (
+    MAPS_DIR,
+    SCREEN_H,
+    SCREEN_W,
+    TILE_FLOOR_COLOR,
+    TILE_SIZE,
+    TILE_WALL_COLOR,
+)
 
 FLOOR = 0
 WALL = 1
 
 _COLS = 50
 _ROWS = 24
+
+# Слой коллизий в TMX и карта уровня по умолчанию (Sprint 11A).
+_COLLISION_LAYER = "collision"
+_DEFAULT_MAP: Path = MAPS_DIR / "level1.tmx"
+
+
+def load_grid_from_tmx(map_path: Path) -> list[list[int]]:
+    """Загрузить сетку коллизий из TMX-слоя `collision`: gid != 0 → WALL, иначе FLOOR.
+
+    Парсит только данные слоя (pytmx.TiledMap, без загрузки изображений тайлсета) —
+    рендер остаётся на примитивах. Возвращает 2D-сетку в том же формате, что _build_grid.
+    """
+    tmx = pytmx.TiledMap(str(map_path))
+    layer = tmx.get_layer_by_name(_COLLISION_LAYER)
+    return [[WALL if gid != 0 else FLOOR for gid in row] for row in layer.data]
 
 
 def _build_grid() -> list[list[int]]:
@@ -83,10 +108,16 @@ def _build_grid() -> list[list[int]]:
 
 
 class GameWorld:
-    """Игровой мир: тайловая сетка бункера A1 с коллизиями."""
+    """Игровой мир: тайловая сетка уровня с коллизиями, загружается из TMX (Sprint 11A).
 
-    def __init__(self) -> None:
-        self._grid: list[list[int]] = _build_grid()
+    Геометрия читается из TMX-слоя `collision` (data-driven уровень). Публичный контракт
+    неизменен: wall_rects / draw / pixel_width / pixel_height.
+    """
+
+    def __init__(self, map_path: Path = _DEFAULT_MAP) -> None:
+        self._grid: list[list[int]] = load_grid_from_tmx(map_path)
+        self._rows: int = len(self._grid)
+        self._cols: int = len(self._grid[0]) if self._grid else 0
         self._wall_rects: list[pygame.Rect] = self._compute_wall_rects()
 
     @property
@@ -97,12 +128,12 @@ class GameWorld:
     @property
     def pixel_width(self) -> int:
         """Ширина мира в пикселях."""
-        return _COLS * TILE_SIZE
+        return self._cols * TILE_SIZE
 
     @property
     def pixel_height(self) -> int:
         """Высота мира в пикселях."""
-        return _ROWS * TILE_SIZE
+        return self._rows * TILE_SIZE
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
         """Отрисовка видимых тайлов с учётом смещения камеры."""
@@ -110,9 +141,9 @@ class GameWorld:
         ts = TILE_SIZE
 
         col_start = max(0, ox // ts)
-        col_end = min(_COLS, (ox + SCREEN_W) // ts + 2)
+        col_end = min(self._cols, (ox + SCREEN_W) // ts + 2)
         row_start = max(0, oy // ts)
-        row_end = min(_ROWS, (oy + SCREEN_H) // ts + 2)
+        row_end = min(self._rows, (oy + SCREEN_H) // ts + 2)
 
         for row in range(row_start, row_end):
             for col in range(col_start, col_end):
@@ -126,8 +157,8 @@ class GameWorld:
     def _compute_wall_rects(self) -> list[pygame.Rect]:
         rects: list[pygame.Rect] = []
         ts = TILE_SIZE
-        for row in range(_ROWS):
-            for col in range(_COLS):
+        for row in range(self._rows):
+            for col in range(self._cols):
                 if self._grid[row][col] == WALL:
                     rects.append(pygame.Rect(col * ts, row * ts, ts, ts))
         return rects

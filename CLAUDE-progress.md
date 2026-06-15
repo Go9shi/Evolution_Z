@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 10C — Release Coherence Cleanup ✅ (синхронизация README/CLAUDE.md с кодом; удаление мёртвых плейсхолдеров; починка ссылок)  
+**Спринт:** 11A — TMX Geometry Pipeline (Phase 1) ✅ (геометрия уровня грузится из level1.tmx; API GameWorld неизменен)  
 **Дата последнего обновления:** 2026-06-14
 
 ---
@@ -499,6 +499,24 @@
 - [x] `ui/game_screen.py` — `load_game` (F9): перед swap снимает подписки СТАРЫХ player/quest_system → повторные загрузки не копят обработчики
 - [x] QuestSystem/Player НЕ модифицированы: их bound-методы снимаются через `EventBus.off` из GameScreen (равенство bound-методов позволяет `list.remove`)
 - [x] `tests/test_eventbus_cleanup.py` — 17 тестов
+
+### Спринт 11A — TMX Geometry Pipeline (Phase 1) ✅ (завершён)
+Цель: перевести источник геометрии уровня `_build_grid()` → `level1.tmx` → `wall_rects`, сохранив публичный API `GameWorld`. Только геометрия; спавны/NPC/триггеры/переходы/спрайты/аудио — вне скоупа (Phase 2+).
+- [x] Эмпирически проверено: `pytmx.TiledMap(path)` парсит image-less TMX (только данные слоя, без загрузки картинок) — рендер остаётся примитивами
+- [x] `assets/maps/level1.tmx` сгенерирован из `_build_grid()` (50×24, gid 1=стена) → **байт-точный паритет** старой сетке → существующие тесты `test_game_world.py` не трогались
+- [x] `systems/game_world.py`: `load_grid_from_tmx(path)` (gid≠0→WALL); `GameWorld(map_path=level1.tmx)` грузит сетку из TMX; `_rows/_cols` — поля экземпляра (из карты), `draw`/`pixel_*`/`_compute_wall_rects` используют их. Публичный контракт (`wall_rects`/`draw`/`pixel_width`/`pixel_height`) неизменен
+- [x] `_build_grid`/`_COLS`/`_ROWS` сохранены как эталон паритета (используются тестами)
+- [x] Контракт `wall_rects: list[pygame.Rect]` неизменен → CombatSystem/EventBus/SaveSystem/Entity/Weapon/UI/GameScreen-flow НЕ затронуты
+- [x] `tests/test_game_world_tmx.py` — 9 тестов
+- [x] Headless smoke: GameScreen грузит мир из TMX (368 стен), паритет с `_build_grid` True, коллизии на месте, update+draw без падений
+
+### Тесты — 902 теста, все зелёные ✅ (после Спринта 11A)
++9 тестов в `tests/test_game_world_tmx.py`:
+- Загрузка: дефолтный мир грузится из TMX (wall_rects непусты); хелпер `load_grid_from_tmx` возвращает сетку FLOOR/WALL; явный путь карты
+- Размеры: pixel_width/height = 50×24 тайлов из карты
+- wall_rects: все прямоугольники размером TILE_SIZE
+- Паритет: сетка из TMX == `_build_grid()`; множество стен из `wall_rects` == из `_build_grid()`
+- Новый уровень из файла: кастомный 3×3 TMX (рамка+пол) и 6×4 сплошных стен задают геометрию/размер **только файлом**, без правки Python
 
 ### Спринт 10C — Release Coherence Cleanup ✅ (завершён)
 Документационный спринт: синхронизировать README/CLAUDE.md/requirements с фактической реализацией, убрать мёртвые плейсхолдеры и битые ссылки. Код/тесты не менялись (893 зелёные до и после).
