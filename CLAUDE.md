@@ -9,7 +9,7 @@
 
 **Название:** Evolution Z (Проект ЭДЕМ)
 **Жанр:** Top-down survival action
-**Стек:** Python 3.12.1 · pygame-ce · pytmx · dataclasses · json
+**Стек:** Python 3.12.1 · pygame-ce · dataclasses · json (`pytmx` — зарезервирован для будущих TMX-карт, в v1 не используется)
 **Цель:** Экзаменационная работа по ООП — архитектура важнее количества контента
 
 ---
@@ -22,17 +22,20 @@ project_eden/
 ├── settings.py        # все константы — FPS, размеры, цвета, пути
 ├── core/              # базовые классы: GameObject, Entity, Weapon, Item
 ├── entities/          # конкретные объекты: Player, Zombie, Boss, Bullet
-│   └── weapons/       # Pistol, Shotgun, Rifle
+│   └── weapons/       # Pistol, Rifle, Shotgun
 ├── systems/           # игровые системы: combat, inventory, quest, save...
-├── ui/                # экраны: MainMenu, GameScreen, InventoryUI...
+├── ui/                # экраны: MainMenu, GameScreen, PauseMenu, InventoryUI...
 ├── data/              # dataclass-структуры: PlayerData, SaveFile...
 ├── assets/
 │   ├── data/          # JSON-конфиги: weapons.json, enemies.json, quests.json
-│   ├── maps/          # Tiled .tmx карты четырёх локаций
-│   ├── sprites/       # PNG спрайты
-│   └── sounds/        # SFX и музыка
-└── saves/             # слоты сохранений (генерируются в рантайме)
+│   ├── maps/          # (зарезервировано) Tiled .tmx — в v1 не используются
+│   ├── sprites/       # (зарезервировано) PNG спрайты — в v1 рендер примитивами
+│   └── sounds/        # (зарезервировано) SFX и музыка — в v1 не реализованы
+└── saves/             # единый файл быстрого сохранения (генерируется в рантайме)
 ```
+
+> **Статус v1 (фактический):** один уровень — сетка стен задаётся в коде
+> (`systems/game_world.py`), а не из TMX. Мульти-главы, аудио и спрайты — вне скоупа v1.
 
 ---
 
@@ -199,7 +202,7 @@ python main.py
 python main.py
 
 # установка зависимостей
-pip install pygame-ce pytmx
+pip install -r requirements.txt
 
 # проверка типов (если установлен mypy)
 mypy . --ignore-missing-imports
@@ -210,14 +213,18 @@ pytest tests/
 
 ---
 
-## Локации и их файлы карт
+## Локации (проектный замысел — НЕ реализовано в v1)
 
-| Глава | Файл карты | Ключевое событие |
+> Ниже — нарративный замысел четырёх глав. **В v1 не реализовано:** TMX-карт нет,
+> игра проходит на одном уровне (стены — в `systems/game_world.py`), а босс и компоненты
+> вакцины размещены на нём же. Таблица оставлена как ориентир для будущих спринтов.
+
+| Глава | Локация (замысел) | Ключевое событие |
 |---|---|---|
-| 1 | `assets/maps/bunker_a1.tmx` | узнать о вирусе, компонент №1 |
-| 2 | `assets/maps/bunker_b3.tmx` | восстановить питание, компонент №2 |
-| 3 | `assets/maps/lab_eden5.tmx` | мутанты, компонент №3 |
-| Финал | `assets/maps/eden7.tmx` | PatientZeroBoss, финал |
+| 1 | Бункер А-1 | узнать о вирусе, компонент №1 |
+| 2 | Бункер Б-3 | восстановить питание, компонент №2 |
+| 3 | Лаборатория ЭДЕМ-5 | мутанты, компонент №3 |
+| Финал | ЭДЕМ-7 | PatientZeroBoss, финал |
 
 ---
 
