@@ -147,8 +147,15 @@ class TestCustomLevel:
         return [[1] * 6 for _ in range(6)]
 
     def _use_map(self, monkeypatch: pytest.MonkeyPatch, path: Path) -> None:
-        """Заставить GameScreen строить мир из конкретной карты (подмена GameWorld())."""
-        monkeypatch.setattr("ui.game_screen.GameWorld", lambda: GameWorld(path))
+        """Заставить GameScreen строить мир из конкретной карты (подмена LevelManager)."""
+        from systems.level_manager import LevelManager
+
+        def factory() -> LevelManager:
+            lm = LevelManager()  # грузит level1, затем подменяем мир на кастомную карту
+            lm._world = GameWorld(path)
+            return lm
+
+        monkeypatch.setattr("ui.game_screen.LevelManager", factory)
 
     def test_custom_player_position(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         path = write_tmx(tmp_path / "lvl.tmx", self._grid(), [("player_start", 96.0, 64.0)])

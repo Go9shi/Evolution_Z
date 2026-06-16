@@ -84,7 +84,7 @@ class TestSave:
         path = save_path(tmp_path)
         SaveSystem().save(path, player, make_quests(player), make_lore())
         parsed = json.loads(path.read_text(encoding="utf-8"))
-        assert set(parsed) == {"player", "skills", "inventory", "quests", "lore"}
+        assert set(parsed) == {"player", "skills", "inventory", "quests", "lore", "map"}
 
 
 # ── SaveData (модель данных) ───────────────────────────────────────────────────

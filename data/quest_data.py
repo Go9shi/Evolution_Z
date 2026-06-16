@@ -17,6 +17,9 @@ class Objective(ABC):
     def on_kill(self, faction: str) -> None:
         """Уведомить цель, что убита сущность данной фракции. По умолчанию — нет реакции."""
 
+    def on_event(self, event_name: str) -> None:
+        """Уведомить цель о мировом событии (напр. вход в зону). По умолчанию — нет реакции."""
+
     @property
     @abstractmethod
     def is_complete(self) -> bool:
@@ -49,6 +52,33 @@ class KillZombieObjective(Objective):
     def progress(self) -> str:
         """Прогресс в формате 'current/target', напр. '3/5'."""
         return f"{self.current_count}/{self.target_count}"
+
+
+class ReachZoneObjective(Objective):
+    """Цель: получить мировое событие `event_name` (напр. вход в зону-триггер).
+
+    Имя события — данные (из квеста), а не хардкод: цель сама сверяет приходящее
+    событие со своим `event_name`. Завершается при первом совпадении.
+    """
+
+    def __init__(self, event_name: str) -> None:
+        self.event_name: str = event_name
+        self._reached: bool = False
+
+    def on_event(self, event_name: str) -> None:
+        """Отметить выполнение при совпадении события с целевым `event_name`."""
+        if event_name == self.event_name:
+            self._reached = True
+
+    @property
+    def is_complete(self) -> bool:
+        """Выполнена, когда нужное событие получено."""
+        return self._reached
+
+    @property
+    def progress(self) -> str:
+        """Прогресс '1/1' после события, иначе '0/1'."""
+        return "1/1" if self._reached else "0/1"
 
 
 @dataclass

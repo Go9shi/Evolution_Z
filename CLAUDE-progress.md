@@ -8,8 +8,8 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 11C — Sprite Rendering Pipeline ✅ (AssetLoader: загрузка/кэш PNG; спрайты для player/enemies/boss/тайлов с fallback на pygame.draw)  
-**Дата последнего обновления:** 2026-06-14
+**Спринт:** 13C — Quest Trigger Binding ✅ (QuestSystem слушает world-события; reach_zone-цель двигает квест data-driven)  
+**Дата последнего обновления:** 2026-06-15
 
 ---
 
@@ -499,6 +499,94 @@
 - [x] `ui/game_screen.py` — `load_game` (F9): перед swap снимает подписки СТАРЫХ player/quest_system → повторные загрузки не копят обработчики
 - [x] QuestSystem/Player НЕ модифицированы: их bound-методы снимаются через `EventBus.off` из GameScreen (равенство bound-методов позволяет `list.remove`)
 - [x] `tests/test_eventbus_cleanup.py` — 17 тестов
+
+### Спринт 13C — Quest Trigger Binding ✅ (завершён)
+Цель: связать триггеры (13B) с QuestSystem через существующий EventBus, data-driven, без if под конкретные квесты. EventBus/emit/QuestSystem-public-API/TriggerZone/SaveSystem-формат не тронуты.
+- [x] Phase 1 — `data/quest_data.py`: `Objective.on_event(name)` (no-op, зеркало `on_kill`) + `ReachZoneObjective(event_name)` (сверяет приходящее событие со своим `event_name` — имя из данных, не хардкод)
+- [x] Phase 3 — `data/quest_loader.py`: builder `reach_zone` (+1 строка в `_OBJECTIVE_BUILDERS`) → квест объявляет нужное событие в JSON
+- [x] Phase 2/4 — `systems/quest_system.py`: `_event_subs`; `accept_quest`/`restore` подписывают на `event_name` целей (`getattr(obj,"event_name","")` — обобщённо, без хардкода имён); generic `_on_world_event(name)` → `obj.on_event(name)` → существующий `_try_complete`/`_finalize` (XP + `quest_completed`)
+- [x] Phase 5 — `ui/game_screen.py`: `_detach_systems` снимает world-подписки (доступ к приватному `_event_subs`, как уже к `_on_entity_died`) → нет утечек при F9/teardown
+- [x] Полная цепочка: TMX trigger → `_check_triggers` (13B) → `EventBus.emit(event_name)` → `QuestSystem._on_world_event` → прогресс. Без `if event_name == "литерал"`
+- [x] Совместимость: старые kill-квесты (`entity_died`→`on_kill`) не тронуты; kill-квест не плодит world-подписок; старые карты/сейвы работают (objective-прогресс не сохранялся и раньше)
+- [x] `tests/test_quest_trigger_binding.py` — 13 тестов
+- [x] Smoke: принят reach_zone-квест → вход в зону → квест COMPLETED + 70 XP
+
+### Тесты — 997 тестов, все зелёные ✅ (после Спринта 13C)
++13 тестов в `tests/test_quest_trigger_binding.py`:
+- ReachZoneObjective: incomplete→complete по совпадению события; игнор чужого; kill/event не пересекаются
+- Loader: `reach_zone` из JSON (event_name)
+- QuestSystem: accept подписывает и событие завершает квест (+reward XP); чужое событие — нет-оп; kill-квест работает; kill не плодит world-подписок
+- Полная цепочка: trigger в карте двигает принятый квест
+- Teardown: cleanup снимает world-подписки
+
+### Спринт 13B — Quest Triggers & World Events ✅ (завершён)
+Цель: квестовые события — часть мира. Data-driven зоны из TMX, при входе игрока эмитят событие через существующий EventBus, однократно. EventBus/QuestSystem/DialogueSystem/CombatSystem/SaveSystem/LevelManager API не тронуты.
+- [x] Phase 1 — `data/trigger_zone.py` (`TriggerZone(trigger_id, event_name, x,y,width,height, active=True)` + `.rect` property; только данные)
+- [x] Phase 2 — TMX: `GameWorld.triggers` + `load_triggers_from_tmx` (object-слой `triggers`, props `trigger_id`/`event_name`; нет слоя → [])
+- [x] Phase 3 — runtime: `GameScreen._triggers` из `self._level.world.triggers`; пересоздаётся в `__init__`/`_enter_map`/map-aware load → триггеры живут на текущей карте, при смене карты авто-обновляются (свежие, active=True)
+- [x] Phase 4 — EventBus: `_check_triggers` (в `update`, перед `_check_transitions`) при входе игрока (`player.rect.colliderect(tz.rect)`) → `EventBus.emit(event_name, {"trigger_id"})`. Без if под конкретные квесты — подписчики слушают именованное событие
+- [x] Phase 5 — single activation: `tz.active=False` после эмита; повторный вход не эмитит. Re-visit карты пере-армирует (новый GameWorld)
+- [x] `tests/test_triggers.py` — 11 тестов
+- [x] Smoke: зона на кастомной карте → вход эмитит `quest_zone_entered` один раз (active=False); level1 без слоя triggers работает
+
+### Тесты — 984 теста, все зелёные ✅ (после Спринта 13B)
++11 тестов в `tests/test_triggers.py`:
+- Phase 1: поля + `.rect`; active=True по умолчанию
+- Phase 2: чтение триггеров из TMX (id/event/геометрия); `GameWorld.triggers`; нет слоя → []; level1 без триггеров
+- Phase 3/4/5: GameScreen строит триггеры; вход в зону эмитит событие (payload trigger_id); однократность (повторный вход — без emit, active=False); вне зоны — нет события; смена карты пересоздаёт; re-visit пере-армирует
+
+### Спринт 13A — NPC System via TMX Object Layer ✅ (завершён)
+Цель: вернуть полноценную NPC-систему — data-driven из TMX, диалог по близости. DialogueSystem/QuestSystem/EventBus/SaveSystem/CombatSystem/LevelManager не тронуты.
+- [x] Phase 1 — `data/npc_data.py` (`NpcData(npc_id, dialogue_id, x, y)`); Phase 5 — `entities/npc.py` заново (`NPC(GameObject)`: npc_id/dialogue_id/rect/draw спрайт `npc_<id>`-или-fallback; в бою не участвует)
+- [x] Phase 2 — TMX: `GameWorld.npcs` + `load_npcs_from_tmx` (object-слой `npcs`, props `npc_id`/`dialogue_id`; нет слоя → [])
+- [x] Phase 3 — runtime: `GameScreen._npcs` строится из `self._level.world.npcs`; пересоздаётся в `_enter_map` и в map-aware load → NPC живут только на текущей карте, при смене карты авто-обновляются
+- [x] Phase 4 — взаимодействие: T → `_interact_with_npc` → `_nearest_npc` (поиск по distance в радиусе `NPC_INTERACTION_RANGE`) → `_start_dialogue(npc.dialogue_id)`. Глобальный T без NPC убран; без NPC рядом — нет-оп
+- [x] `assets/maps/level1.tmx` — слой `npcs` с ranger (`dialogue_id=ranger_intro`) у спавна (tile 13,6) → существующие T-тесты зелёные без правок; collision/spawns парити (11A/11B) сохранены
+- [x] `settings.py` — `NPC_INTERACTION_RANGE=96`, `NPC_SIZE=32`
+- [x] `tests/test_npc.py` — 12 тестов
+- [x] Smoke: ranger на level1; T рядом → DialogueUI; T далеко → нет-оп; смена карты (level2) → npcs=[]; fallback-рендер
+
+### Тесты — 973 теста, все зелёные ✅ (после Спринта 13A)
++12 тестов в `tests/test_npc.py`:
+- Данные/TMX: чтение NPC из слоя (id/dialogue/позиция); `GameWorld.npcs`; нет слоя → []; level1 содержит ranger
+- Сущность: свойства; fallback-рендер (по COLOR); спрайт `npc_ranger.png` (по пикселю)
+- Runtime: GameScreen спавнит NPC карты; смена карты пересоздаёт (старые исчезают, новая без NPC → [])
+- Взаимодействие: T рядом → диалог; T далеко → нет-оп; выбирается ближайший NPC
+
+### Спринт 12B — Level/Scene Manager + Map-Aware Save ✅ (завершён)
+Keystone-спринт: фундамент для мультикарт/глав/переходов/NPC-per-map. Контракт `wall_rects` неизменен → CombatSystem/EventBus/SaveSystem-ядро/Entity/Weapon/Boss AI/Quest/Dialogue/AssetLoader не тронуты.
+- [x] **Phase 1 — TMX transitions:** `data/transition.py` (`Transition`); `GameWorld.transitions` + `load_transitions_from_tmx` (object-слой `transitions`, props `target_map`/`target_spawn`; нет слоя → [])
+- [x] **Phase 2 — LevelManager:** `systems/level_manager.py` (load/change/current map, `world`). `GameScreen` владеет `LevelManager`, не `GameWorld` напрямую; все обращения через `self._level.world`
+- [x] **Phase 3 — Map-aware Save:** `SaveData` +`map_id`/`player_x`/`player_y` (секция `"map"`, `from_dict` толерантен); `SaveSystem.capture/save` принимают `map_id`, пишут `player.pos`. Старые сейвы без `"map"` → level1, позиция (0,0)=«не задана»→spawn
+- [x] **Phase 4 — Переходы:** `GameScreen._check_transitions` (в `update`) → `_enter_map(target_map, target_spawn)`: смена карты, телепорт игрока (персистит прогресс) в named-spawn, респавн врагов/босса/предметов, новый CombatSystem, переустановка камеры. `_find_spawn` (обобщение `_find_player_start`)
+- [x] Map-aware load: при иной карте — `change_map` + респавн содержимого; позиция из сейва (или spawn для старых). `_fresh_systems(pos)` параметризован
+- [x] `assets/maps/level2.tmx` — реальная вторая карта (для map_id-резолва/демо); в level1 переход НЕ вшит (одиночный уровень не тронут)
+- [x] Совместимость: `cleanup()`/`GameStateManager` переиспользованы; EventBus-подписки при переходе/загрузке не текут (player/screen персистят, враги/босс/combat без подписок). Обновлён `test_save_system` (секция `map`) и `test_game_world_spawns` (custom-map через LevelManager)
+- [x] `tests/test_level_transitions.py` — 16 тестов
+- [x] Smoke: single level (level1) цел; переход level1→level2 с телепортом; save `{map:level2,x,y}` → load восстанавливает карту+позицию+XP
+
+### Тесты — 961 тест, все зелёные ✅ (после Спринта 12B)
++16 тестов в `tests/test_level_transitions.py`:
+- Phase 1: чтение transition-объектов (target_map/spawn/геометрия); `GameWorld.transitions`; нет слоя → []
+- Phase 2: LevelManager грузит/меняет карту (world пересоздан); контракт wall_rects цел
+- Phase 4: вход в зону переключает карту; телепорт в target_spawn; вне зоны — без смены
+- Phase 3: SaveData map-поля + roundtrip; старый сейв без "map" → дефолты; GameScreen save пишет текущую карту+позицию; load восстанавливает карту+позицию
+
+### Спринт 12A — Sprite Pipeline Completion ✅ (завершён)
+Цель: убрать визуальную зависимость от `pygame.draw` для ОСТАВШИХСЯ игровых сущностей. Анализ показал: AssetLoader + спрайты Player/Zombie/Boss/тайлов уже были сделаны в 11C; реально не покрыты были Bullet/FoodItem/QuestItem.
+- [x] Решение по «SpriteComponent»: переиспользован существующий паттерн `SPRITE: str|None` (sprite_id) + `AssetLoader` (единая точка/ресурс) — без нового класса и без переподключения 8 рабочих сущностей (запрет на рефакторинг ради рефакторинга / риск регрессий 11C)
+- [x] `entities/bullet.py` — `Bullet.SPRITE="bullet"`, `AcidBullet.SPRITE="acid_bullet"`; `draw` спрайт-или-fallback-круг
+- [x] `core/item.py` — `Item.SPRITE=None`; `draw` спрайт-или-fallback-квадрат (зависимость core→systems уже существует через `core/entity.py`)
+- [x] `FoodItem.SPRITE="item_food"`, `QuestItem.SPRITE="item_quest"`
+- [x] Не тронуты: AssetLoader, Player/Zombie/Boss/тайлы (11C), CombatSystem, EventBus, SaveSystem, Boss AI, Weapon/Quest/Dialogue, публичный API GameWorld, контракты Entity
+- [x] `tests/test_sprite_entities.py` — 13 тестов
+- [x] Smoke: полный кадр (player+enemies+boss+bullets+items+tiles) без ассетов рисуется по fallback; геймплей (выстрел) работает
+
+### Тесты — 947 тестов, все зелёные ✅ (после Спринта 12A)
++13 тестов в `tests/test_sprite_entities.py`:
+- SPRITE-идентификаторы: bullet / acid_bullet / item_food / item_quest
+- Рендер спрайтом при наличии PNG: Bullet/AcidBullet/FoodItem/QuestItem (проверка по пикселю центра)
+- Fallback без PNG: рендер примитивом (по COLOR); в проекте PNG нет → get()=None; draw без ассетов без падений
 
 ### Спринт 11C — Sprite Rendering Pipeline ✅ (завершён)
 Цель: первый графический пайплайн — подключаемые PNG-спрайты для сущностей и тайлов, с сохранением fallback на pygame.draw. Только статические изображения (без анимаций/sprite sheets/направлений/состояний).

@@ -1,3 +1,5 @@
+from typing import Callable
+
 from data.quest_data import Quest, QuestStatus
 from systems.event_bus import EventBus
 from systems.experience import ExperienceComponent
@@ -10,6 +12,9 @@ class QuestSystem:
         self._active: list[Quest] = []
         self._completed: list[Quest] = []
         self._exp: ExperienceComponent = exp_component
+        # Подписки на world-события (Sprint 13C): имя события → bound-хендлер. Имена берутся
+        # из данных целей (objective.event_name), а не хардкодятся. Снимаются при teardown.
+        self._event_subs: dict[str, Callable[[dict], None]] = {}
         EventBus.on("entity_died", self._on_entity_died)
 
     @property
@@ -28,6 +33,7 @@ class QuestSystem:
             return
         quest.status = QuestStatus.ACTIVE
         self._active.append(quest)
+        self._subscribe_world_events(quest)
 
     def update_progress(self, event_data: dict) -> None:
         """Обработать событие гибели сущности и обновить цели активных квестов."""
@@ -58,12 +64,42 @@ class QuestSystem:
         for quest in active:
             quest.status = QuestStatus.ACTIVE
             self._active.append(quest)
+            self._subscribe_world_events(quest)
         for quest in completed:
             quest.status = QuestStatus.COMPLETED
             self._completed.append(quest)
 
     def _on_entity_died(self, data: dict) -> None:
         self.update_progress(data)
+
+    # ── world events (Sprint 13C) ───────────────────────────────────────────
+
+    def _subscribe_world_events(self, quest: Quest) -> None:
+        """Подписаться на world-события, объявленные целями квеста (имена — из данных).
+
+        Каждая цель может объявить нужное событие через атрибут `event_name`. Имя берётся
+        обобщённо (без хардкода и без if под конкретный квест); общий хендлер диспатчит
+        событие всем активным целям.
+        """
+        for obj in quest.objectives:
+            name: str = getattr(obj, "event_name", "")
+            if name and name not in self._event_subs:
+                handler = self._make_world_handler(name)
+                self._event_subs[name] = handler
+                EventBus.on(name, handler)
+
+    def _make_world_handler(self, event_name: str) -> Callable[[dict], None]:
+        """Создать хендлер EventBus, помнящий имя события (closure)."""
+        def handler(_data: dict) -> None:
+            self._on_world_event(event_name)
+        return handler
+
+    def _on_world_event(self, event_name: str) -> None:
+        """Прогресс по world-событию: уведомить цели активных квестов и проверить завершение."""
+        for quest in list(self._active):
+            for obj in quest.objectives:
+                obj.on_event(event_name)
+            self._try_complete(quest)
 
     def _try_complete(self, quest: Quest) -> None:
         if not quest.objectives:

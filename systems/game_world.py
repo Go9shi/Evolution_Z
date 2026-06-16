@@ -3,7 +3,10 @@ from pathlib import Path
 import pygame
 import pytmx
 
+from data.npc_data import NpcData
 from data.spawn_point import SpawnPoint
+from data.transition import Transition
+from data.trigger_zone import TriggerZone
 from settings import (
     MAPS_DIR,
     SCREEN_H,
@@ -20,9 +23,12 @@ WALL = 1
 _COLS = 50
 _ROWS = 24
 
-# Слои TMX и карта уровня по умолчанию (Sprint 11A/11B).
+# Слои TMX и карта уровня по умолчанию (Sprint 11A/11B/12B).
 _COLLISION_LAYER = "collision"
 _SPAWNS_LAYER = "spawns"
+_TRANSITIONS_LAYER = "transitions"
+_NPCS_LAYER = "npcs"
+_TRIGGERS_LAYER = "triggers"
 _DEFAULT_MAP: Path = MAPS_DIR / "level1.tmx"
 
 # Имена тайловых спрайтов (Sprint 11C); нет файла → fallback на pygame.draw.
@@ -53,6 +59,85 @@ def load_spawns_from_tmx(map_path: Path) -> list[SpawnPoint]:
     except ValueError:
         return []
     return [SpawnPoint(obj.name, float(obj.x), float(obj.y)) for obj in layer]
+
+
+def load_transitions_from_tmx(map_path: Path) -> list[Transition]:
+    """Загрузить зоны перехода из TMX object-слоя `transitions` (Sprint 12B).
+
+    Каждый прямоугольный объект → Transition(x,y,width,height, target_map, target_spawn),
+    где target_* берутся из custom-свойств объекта. Отсутствие слоя → пустой список.
+    """
+    tmx = pytmx.TiledMap(str(map_path))
+    try:
+        layer = tmx.get_layer_by_name(_TRANSITIONS_LAYER)
+    except ValueError:
+        return []
+    out: list[Transition] = []
+    for obj in layer:
+        props = obj.properties
+        out.append(
+            Transition(
+                float(obj.x),
+                float(obj.y),
+                float(obj.width),
+                float(obj.height),
+                str(props.get("target_map", "")),
+                str(props.get("target_spawn", "")),
+            )
+        )
+    return out
+
+
+def load_npcs_from_tmx(map_path: Path) -> list[NpcData]:
+    """Загрузить NPC из TMX object-слоя `npcs` (Sprint 13A).
+
+    Каждый объект → NpcData(npc_id, dialogue_id, x, y) из custom-свойств и позиции.
+    Отсутствие слоя (карта без NPC) → пустой список.
+    """
+    tmx = pytmx.TiledMap(str(map_path))
+    try:
+        layer = tmx.get_layer_by_name(_NPCS_LAYER)
+    except ValueError:
+        return []
+    out: list[NpcData] = []
+    for obj in layer:
+        props = obj.properties
+        out.append(
+            NpcData(
+                str(props.get("npc_id", "")),
+                str(props.get("dialogue_id", "")),
+                float(obj.x),
+                float(obj.y),
+            )
+        )
+    return out
+
+
+def load_triggers_from_tmx(map_path: Path) -> list[TriggerZone]:
+    """Загрузить зоны-триггеры из TMX object-слоя `triggers` (Sprint 13B).
+
+    Каждый прямоугольный объект → TriggerZone(trigger_id, event_name, x,y,width,height)
+    из custom-свойств и геометрии. Отсутствие слоя (карта без триггеров) → пустой список.
+    """
+    tmx = pytmx.TiledMap(str(map_path))
+    try:
+        layer = tmx.get_layer_by_name(_TRIGGERS_LAYER)
+    except ValueError:
+        return []
+    out: list[TriggerZone] = []
+    for obj in layer:
+        props = obj.properties
+        out.append(
+            TriggerZone(
+                str(props.get("trigger_id", "")),
+                str(props.get("event_name", "")),
+                float(obj.x),
+                float(obj.y),
+                float(obj.width),
+                float(obj.height),
+            )
+        )
+    return out
 
 
 def _build_grid() -> list[list[int]]:
@@ -141,6 +226,9 @@ class GameWorld:
         self._cols: int = len(self._grid[0]) if self._grid else 0
         self._wall_rects: list[pygame.Rect] = self._compute_wall_rects()
         self._spawns: list[SpawnPoint] = load_spawns_from_tmx(map_path)
+        self._transitions: list[Transition] = load_transitions_from_tmx(map_path)
+        self._npcs: list[NpcData] = load_npcs_from_tmx(map_path)
+        self._triggers: list[TriggerZone] = load_triggers_from_tmx(map_path)
 
     @property
     def wall_rects(self) -> list[pygame.Rect]:
@@ -151,6 +239,21 @@ class GameWorld:
     def spawns(self) -> list[SpawnPoint]:
         """Точки спавна из object-слоя карты (player/enemies/boss/items)."""
         return self._spawns
+
+    @property
+    def transitions(self) -> list[Transition]:
+        """Зоны перехода на другие карты из object-слоя `transitions`."""
+        return self._transitions
+
+    @property
+    def npcs(self) -> list[NpcData]:
+        """NPC текущей карты из object-слоя `npcs`."""
+        return self._npcs
+
+    @property
+    def triggers(self) -> list[TriggerZone]:
+        """Зоны-триггеры текущей карты из object-слоя `triggers`."""
+        return self._triggers
 
     @property
     def pixel_width(self) -> int:

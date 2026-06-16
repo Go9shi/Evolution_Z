@@ -1,12 +1,14 @@
 import pygame
 
 from core.game_object import GameObject
+from systems.asset_loader import AssetLoader
 
 
 class Bullet(GameObject):
     """Снаряд. Движется в заданном направлении, деактивируется при касании стены или цели."""
 
     COLOR: tuple[int, int, int] = (255, 230, 50)
+    SPRITE: str | None = "bullet"  # assets/sprites/bullet.png; нет файла → fallback-круг
 
     def __init__(
         self,
@@ -68,7 +70,10 @@ class Bullet(GameObject):
                     return
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
-        """Отрисовка пули как заполненного круга."""
+        """Отрисовка пули спрайтом (или fallback-кругом при отсутствии PNG)."""
+        screen_rect = self.rect.move(-int(offset.x), -int(offset.y))
+        if AssetLoader.draw_sprite(surface, self.SPRITE, screen_rect):
+            return
         screen_x = int(self.pos.x - offset.x)
         screen_y = int(self.pos.y - offset.y)
         pygame.draw.circle(surface, self.COLOR, (screen_x, screen_y), self._size)
@@ -78,3 +83,4 @@ class AcidBullet(Bullet):
     """Кислотный снаряд SpitterZombie. Физика из Bullet, отличается цветом."""
 
     COLOR: tuple[int, int, int] = (100, 220, 50)
+    SPRITE = "acid_bullet"

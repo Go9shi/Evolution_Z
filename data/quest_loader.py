@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable
 
-from data.quest_data import KillZombieObjective, Objective, Quest
+from data.quest_data import KillZombieObjective, Objective, Quest, ReachZoneObjective
 
 _REQUIRED_QUEST_FIELDS: tuple[str, ...] = ("id", "title", "description", "reward_xp", "objectives")
 
@@ -18,9 +18,17 @@ def _build_kill_zombie(raw: dict[str, Any]) -> Objective:
     return KillZombieObjective(target_count=raw["target_count"])
 
 
+def _build_reach_zone(raw: dict[str, Any]) -> Objective:
+    """Построить ReachZoneObjective из словаря. Требует поле event_name."""
+    if "event_name" not in raw:
+        raise QuestLoadError("Objective 'reach_zone' requires field 'event_name'")
+    return ReachZoneObjective(event_name=raw["event_name"])
+
+
 # Диспетчер построителей целей по типу. Новый тип Objective — одна строка здесь.
 _OBJECTIVE_BUILDERS: dict[str, Callable[[dict[str, Any]], Objective]] = {
     "kill_zombie": _build_kill_zombie,
+    "reach_zone": _build_reach_zone,
 }
 
 

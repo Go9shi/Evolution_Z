@@ -37,9 +37,13 @@ class SaveSystem:
     # ── capture / serialize ─────────────────────────────────────────────────
 
     def capture(
-        self, player: Player, quest_system: QuestSystem, lore_system: LoreSystem
+        self,
+        player: Player,
+        quest_system: QuestSystem,
+        lore_system: LoreSystem,
+        map_id: str = "level1",
     ) -> SaveData:
-        """Снять снимок состояния через публичный API систем."""
+        """Снять снимок состояния через публичный API систем (+ карта и позиция игрока)."""
         exp = player.experience
         return SaveData(
             player_xp=exp.current_xp,
@@ -49,6 +53,9 @@ class SaveSystem:
             active_quest_ids=[quest.id for quest in quest_system.active_quests],
             completed_quest_ids=[quest.id for quest in quest_system.completed_quests],
             unlocked_lore_ids=[entry.id for entry in lore_system.unlocked_entries],
+            map_id=map_id,
+            player_x=player.pos.x,
+            player_y=player.pos.y,
         )
 
     def save(
@@ -57,9 +64,10 @@ class SaveSystem:
         player: Player,
         quest_system: QuestSystem,
         lore_system: LoreSystem,
+        map_id: str = "level1",
     ) -> None:
         """Снять снимок и записать его в JSON-файл path."""
-        data = self.capture(player, quest_system, lore_system)
+        data = self.capture(player, quest_system, lore_system, map_id)
         path.write_text(json.dumps(data.to_dict(), indent=2), encoding="utf-8")
 
     # ── deserialize / apply ─────────────────────────────────────────────────

@@ -9,24 +9,27 @@ from data.dialogue_data import Dialogue
 from data.dialogue_loader import load_dialogues
 from data.enemy_data import EnemyData
 from data.lore_data import LoreEntry
+from data.npc_data import NpcData
 from data.player_data import PlayerData
 from data.quest_data import Quest
 from data.quest_loader import load_quests
 from data.spawn_point import SpawnPoint
 from data.spitter_data import SpitterData
+from data.trigger_zone import TriggerZone
 from data.weapon_config import WeaponConfig
 from entities.boss import PatientZeroBoss
 from entities.items.food_item import FoodItem
 from entities.items.quest_item import QuestItem
+from entities.npc import NPC
 from entities.player import Player
 from entities.weapons.pistol import Pistol
 from entities.zombie import RunnerZombie, SpitterZombie, WalkerZombie, Zombie
-from settings import BOSS_MAX_HEALTH, DATA_DIR, SAVES_DIR, SCREEN_H, SCREEN_W
+from settings import BOSS_MAX_HEALTH, DATA_DIR, NPC_INTERACTION_RANGE, SAVES_DIR, SCREEN_H, SCREEN_W
 from systems.camera import Camera
 from systems.combat import CombatSystem
 from systems.dialogue import DialogueSystem
 from systems.event_bus import EventBus
-from systems.game_world import GameWorld
+from systems.level_manager import LevelManager
 from systems.lore import LoreSystem
 from systems.quest_system import QuestSystem
 from systems.save_system import SaveError, SaveSystem
@@ -58,16 +61,19 @@ class GameScreen(BaseScreen):
         # Колбэк завершения приложения (из Main Menu). По умолчанию нет-оп — тесты,
         # создающие GameScreen напрямую, не обязаны его передавать.
         self._on_quit: Callable[[], None] = on_quit if on_quit is not None else (lambda: None)
-        self._world = GameWorld()
+        # Карта — через LevelManager (Sprint 12B): GameScreen не владеет GameWorld напрямую.
+        self._level = LevelManager()
         # Размещение всех игровых объектов — из object-слоя карты (Sprint 11B):
         # GameScreen больше не хранит координат уровня.
-        spawns = self._world.spawns
+        spawns = self._level.world.spawns
         self._player_start: tuple[float, float] = self._find_player_start(spawns)
         self._player = Player(*self._player_start, self._load_player_config())
         self._player.equip(Pistol(self._load_weapon_config("pistol")))
         self._camera = Camera()
         self._enemies: list[Zombie] = self._spawn_enemies(spawns)
         self._boss: PatientZeroBoss = self._spawn_boss(spawns)
+        self._npcs: list[NPC] = self._spawn_npcs(self._level.world.npcs)
+        self._triggers: list[TriggerZone] = self._level.world.triggers
         self._victory: bool = False
         self._game_over: bool = False
         self._cleaned: bool = False
@@ -141,7 +147,7 @@ class GameScreen(BaseScreen):
                     InventoryUI(self._player.inventory, self._state_manager.pop)
                 )
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_t:
-            self._start_dialogue("ranger_intro")
+            self._interact_with_npc()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_F5:
             self._save_game()
         elif event.type == pygame.KEYDOWN and event.key == pygame.K_F9:
@@ -151,7 +157,7 @@ class GameScreen(BaseScreen):
         # Терминальные состояния (победа / поражение) замораживают игровой цикл.
         if self._victory or self._game_over:
             return
-        walls = self._world.wall_rects
+        walls = self._level.world.wall_rects
         self._player.update(dt, walls)
         self._camera.follow(self._player.pos)
 
@@ -173,11 +179,59 @@ class GameScreen(BaseScreen):
                 self._player.pickup_item(item)
         self._world_items = [i for i in self._world_items if i.active]
 
+        self._check_triggers()
+        self._check_transitions()
+
+    def _check_triggers(self) -> None:
+        """Вход игрока в зону-триггер → emit event_name через EventBus (однократно).
+
+        Single activation: после эмита `active=False`; повторный вход не эмитит снова.
+        Подписчики (квест-контент/тесты) слушают именованное событие — без if под квесты.
+        """
+        pr = self._player.rect
+        for tz in self._triggers:
+            if tz.active and tz.event_name and pr.colliderect(tz.rect):
+                tz.active = False
+                EventBus.emit(tz.event_name, {"trigger_id": tz.trigger_id})
+
+    def _check_transitions(self) -> None:
+        """Вход игрока в зону перехода → загрузка целевой карты и телепорт в target_spawn."""
+        pr = self._player.rect
+        for t in self._level.world.transitions:
+            if not t.target_map:
+                continue
+            zone = pygame.Rect(int(t.x), int(t.y), int(t.width), int(t.height))
+            if pr.colliderect(zone):
+                self._enter_map(t.target_map, t.target_spawn)
+                return
+
+    def _enter_map(self, map_id: str, spawn_name: str) -> None:
+        """Сменить карту и переместить существующего игрока в названную точку спавна.
+
+        Игрок персистит (несёт прогресс), мир/враги/босс/предметы пересоздаются под новую
+        карту, combat сбрасывается. EventBus-подписки не меняются (player/screen те же).
+        """
+        self._level.change_map(map_id)
+        spawns = self._level.world.spawns
+        self._player_start = self._find_player_start(spawns)
+        pos = self._find_spawn(spawns, spawn_name) or self._player_start
+        self._player.pos.update(pos[0], pos[1])
+        self._player.rect.center = (int(pos[0]), int(pos[1]))
+        self._enemies = self._spawn_enemies(spawns)
+        self._boss = self._spawn_boss(spawns)
+        self._world_items = self._spawn_items(spawns)
+        self._npcs = self._spawn_npcs(self._level.world.npcs)
+        self._triggers = self._level.world.triggers
+        self._combat = CombatSystem()
+        self._camera.follow(self._player.pos)
+
     def draw(self, surface: pygame.Surface) -> None:
         surface.fill((20, 20, 25))
-        self._world.draw(surface, self._camera.offset)
+        self._level.world.draw(surface, self._camera.offset)
         for item in self._world_items:
             item.draw(surface, self._camera.offset)
+        for npc in self._npcs:
+            npc.draw(surface, self._camera.offset)
         for enemy in self._enemies:
             enemy.draw(surface, self._camera.offset)
         if self._boss.active:
@@ -203,12 +257,39 @@ class GameScreen(BaseScreen):
     # ── private helpers ────────────────────────────────────────────────────
 
     @staticmethod
+    def _find_spawn(spawns: list[SpawnPoint], name: str) -> tuple[float, float] | None:
+        """Координаты точки спавна по имени; None, если объект отсутствует."""
+        for sp in spawns:
+            if sp.name == name:
+                return sp.x, sp.y
+        return None
+
+    @staticmethod
     def _find_player_start(spawns: list[SpawnPoint]) -> tuple[float, float]:
         """Координаты старта игрока из карты (`player_start`); (0,0), если объект отсутствует."""
-        for sp in spawns:
-            if sp.name == "player_start":
-                return sp.x, sp.y
-        return 0.0, 0.0
+        return GameScreen._find_spawn(spawns, "player_start") or (0.0, 0.0)
+
+    @staticmethod
+    def _spawn_npcs(npc_data: list[NpcData]) -> list[NPC]:
+        """Создать NPC текущей карты из данных TMX-слоя `npcs` (Sprint 13A)."""
+        return [NPC(d.x, d.y, d.npc_id, d.dialogue_id) for d in npc_data]
+
+    def _nearest_npc(self) -> NPC | None:
+        """Ближайший NPC в радиусе `NPC_INTERACTION_RANGE`; None, если рядом никого нет."""
+        nearest: NPC | None = None
+        best = NPC_INTERACTION_RANGE
+        for npc in self._npcs:
+            distance = self._player.pos.distance_to(npc.pos)
+            if distance <= best:
+                best = distance
+                nearest = npc
+        return nearest
+
+    def _interact_with_npc(self) -> None:
+        """T: открыть диалог ближайшего NPC в радиусе. Без NPC рядом — нет-оп."""
+        npc = self._nearest_npc()
+        if npc is not None:
+            self._start_dialogue(npc.dialogue_id)
 
     def _spawn_enemies(self, spawns: list[SpawnPoint]) -> list[Zombie]:
         """Создать врагов из точек спавна enemy_* (класс и конфиг — по токену имени)."""
@@ -274,9 +355,15 @@ class GameScreen(BaseScreen):
     # ── save / load (Sprint 10B) ────────────────────────────────────────────
 
     def _save_game(self) -> None:
-        """F5: сохранить текущее состояние через SaveSystem в единый файл."""
+        """F5: сохранить текущее состояние (включая карту и позицию) через SaveSystem."""
         self._SAVE_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SaveSystem().save(self._SAVE_PATH, self._player, self._quest_system, self._lore_system)
+        SaveSystem().save(
+            self._SAVE_PATH,
+            self._player,
+            self._quest_system,
+            self._lore_system,
+            self._level.current_map_id,
+        )
 
     def load_game(self) -> None:
         """Загрузить сохранение и восстановить состояние (F9 и Continue из меню).
@@ -290,13 +377,32 @@ class GameScreen(BaseScreen):
             data = save_system.load(self._SAVE_PATH)
         except SaveError:
             return
-        player, quest_system, lore_system = self._fresh_systems()
+        # Map-aware (Sprint 12B): при иной карте — сменить её; позиция (0,0) у старых
+        # сейвов трактуется как «не задана» → спавн в player_start.
+        map_changed = data.map_id != self._level.current_map_id
+        if map_changed:
+            self._level.change_map(data.map_id)
+            self._player_start = self._find_player_start(self._level.world.spawns)
+        has_pos = data.player_x != 0.0 or data.player_y != 0.0
+        pos = (data.player_x, data.player_y) if has_pos else self._player_start
+
+        player, quest_system, lore_system = self._fresh_systems(pos)
         save_system.apply(data, player, quest_system, lore_system)
         # Снять подписки заменяемых систем, чтобы повторные загрузки не копили обработчики.
         self._detach_systems(self._player, self._quest_system)
         self._player = player
         self._quest_system = quest_system
         self._lore_system = lore_system
+        # Карта/позиция изменились → пересоздать содержимое уровня под восстановленную карту.
+        if map_changed or has_pos:
+            spawns = self._level.world.spawns
+            self._enemies = self._spawn_enemies(spawns)
+            self._boss = self._spawn_boss(spawns)
+            self._world_items = self._spawn_items(spawns)
+            self._npcs = self._spawn_npcs(self._level.world.npcs)
+            self._triggers = self._level.world.triggers
+            self._combat = CombatSystem()
+            self._camera.follow(self._player.pos)
 
     def cleanup(self) -> None:
         """Снять все подписки EventBus этого экрана при его уничтожении (teardown).
@@ -318,10 +424,20 @@ class GameScreen(BaseScreen):
         """Снять подписки EventBus у игрока и системы квестов (при swap на F9 / teardown)."""
         EventBus.off("player_level_up", player._on_level_up)
         EventBus.off("entity_died", quest_system._on_entity_died)
+        # World-подписки квестов (Sprint 13C): снять каждую, иначе при swap/teardown утекут.
+        for name, handler in quest_system._event_subs.items():
+            EventBus.off(name, handler)
+        quest_system._event_subs.clear()
 
-    def _fresh_systems(self) -> tuple[Player, QuestSystem, LoreSystem]:
-        """Построить чистые player/quest/lore для восстановления сохранения."""
-        player = Player(*self._player_start, self._load_player_config())
+    def _fresh_systems(
+        self, pos: tuple[float, float] | None = None
+    ) -> tuple[Player, QuestSystem, LoreSystem]:
+        """Построить чистые player/quest/lore для восстановления сохранения.
+
+        pos — позиция игрока (из сейва); по умолчанию — стартовая точка текущей карты.
+        """
+        start = pos if pos is not None else self._player_start
+        player = Player(*start, self._load_player_config())
         player.equip(Pistol(self._load_weapon_config("pistol")))
         quest_system = QuestSystem(player.experience)
         lore_system = LoreSystem()

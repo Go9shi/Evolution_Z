@@ -12,6 +12,7 @@ class FoodItem(Item):
     """Еда. Восстанавливает сытость игрока при использовании."""
 
     COLOR: tuple[int, int, int] = (210, 175, 50)
+    SPRITE = "item_food"
 
     def __init__(
         self,

@@ -20,6 +20,11 @@ class SaveData:
     active_quest_ids: list[str] = field(default_factory=list)
     completed_quest_ids: list[str] = field(default_factory=list)
     unlocked_lore_ids: list[str] = field(default_factory=list)
+    # Текущая карта и позиция игрока (Sprint 12B). Дефолты — обратная совместимость
+    # старых сейвов (без секции "map"): level1, позиция (0,0) = «не задана» → spawn.
+    map_id: str = "level1"
+    player_x: float = 0.0
+    player_y: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
         """Преобразовать в JSON-совместимый словарь."""
@@ -32,6 +37,7 @@ class SaveData:
                 "completed": list(self.completed_quest_ids),
             },
             "lore": list(self.unlocked_lore_ids),
+            "map": {"id": self.map_id, "x": self.player_x, "y": self.player_y},
         }
 
     @classmethod
@@ -46,6 +52,9 @@ class SaveData:
         skills_raw = raw.get("skills")
         if not isinstance(skills_raw, dict):
             skills_raw = {}
+        world = raw.get("map")
+        if not isinstance(world, dict):
+            world = {}
 
         return cls(
             player_xp=int(player.get("xp", 0)),
@@ -55,4 +64,7 @@ class SaveData:
             active_quest_ids=list(quests.get("active", []) or []),
             completed_quest_ids=list(quests.get("completed", []) or []),
             unlocked_lore_ids=list(raw.get("lore", []) or []),
+            map_id=str(world.get("id", "level1")),
+            player_x=float(world.get("x", 0.0)),
+            player_y=float(world.get("y", 0.0)),
         )

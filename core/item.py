@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import pygame
 
 from core.game_object import GameObject
+from systems.asset_loader import AssetLoader
 
 if TYPE_CHECKING:
     from entities.player import Player
@@ -17,6 +18,7 @@ class Item(GameObject, ABC):
     """Базовый класс предметов. Позиционированный объект, который можно подобрать и использовать."""
 
     COLOR: tuple[int, int, int] = (200, 200, 200)
+    SPRITE: str | None = None  # переопределяется подклассами; None → fallback-квадрат
 
     def __init__(
         self,
@@ -64,7 +66,10 @@ class Item(GameObject, ABC):
         """Использовать предмет на игроке. True — предмет потреблён и удаляется из инвентаря."""
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
-        """Отрисовка предмета на земле как цветного квадрата."""
+        """Отрисовка предмета на земле спрайтом (или fallback-квадратом при отсутствии PNG)."""
+        screen_rect = self.rect.move(-int(offset.x), -int(offset.y))
+        if AssetLoader.draw_sprite(surface, self.SPRITE, screen_rect):
+            return
         screen_x = int(self.pos.x - offset.x)
         screen_y = int(self.pos.y - offset.y)
         half = _ITEM_SIZE // 2

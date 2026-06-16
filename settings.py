@@ -47,6 +47,10 @@ BOSS_PATROL_RADIUS: float = 96.0
 BOSS_PATROL_SPEED_FACTOR: float = 0.5
 BOSS_PATROL_ARRIVE_DIST: float = 8.0
 
+# NPC (Sprint 13A). Радиус взаимодействия с ближайшим NPC и размер для рендера/коллизий.
+NPC_INTERACTION_RANGE: float = 96.0
+NPC_SIZE: int = 32
+
 # Тайлы
 TILE_SIZE: int = 32
 TILE_FLOOR_COLOR: tuple[int, int, int] = (45, 45, 55)

@@ -12,6 +12,7 @@ class QuestItem(Item):
     """Квестовый предмет (компонент вакцины). Хранится в инвентаре, не расходуется."""
 
     COLOR: tuple[int, int, int] = (80, 160, 255)
+    SPRITE = "item_quest"
 
     def use(self, player: Player) -> bool:
         """Квестовые предметы не расходуются при использовании."""
