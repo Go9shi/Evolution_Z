@@ -28,6 +28,7 @@ from settings import (
     BOSS_XP_REWARD,
     TILE_SIZE,
 )
+from systems.asset_loader import AssetLoader
 from systems.event_bus import EventBus
 
 
@@ -40,6 +41,7 @@ class Boss(Entity):
     """
 
     COLOR: tuple[int, int, int] = (120, 30, 120)
+    SPRITE: str | None = None  # переопределяется подклассами; None → fallback-примитив
     # Босс — faction='enemy', значит проходит через путь начисления XP за врагов
     # (GameScreen._on_entity_died читает entity.xp_reward). Значение — из settings
     # (Sprint 9G), как у Zombie.xp_reward; без новой системы наград.
@@ -69,9 +71,10 @@ class Boss(Entity):
             EventBus.emit("boss_defeated", {"boss": self})
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
-        """Отрисовка прямоугольника босса с полоской HP (паттерн Zombie.draw)."""
+        """Отрисовка спрайта (или fallback-примитива) босса с полоской HP."""
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
-        pygame.draw.rect(surface, self.COLOR, draw_rect)
+        if not AssetLoader.draw_sprite(surface, self.SPRITE, draw_rect):
+            pygame.draw.rect(surface, self.COLOR, draw_rect)
 
         bar_w = self._rect.width
         hp_w = max(0, int(bar_w * self.health.percentage))
@@ -90,6 +93,7 @@ class PatientZeroBoss(Boss):
     """
 
     COLOR = (150, 20, 90)
+    SPRITE = "boss"
     _SIZE: int = TILE_SIZE * 2  # босс крупнее обычных врагов; размер из settings, не магия
 
     def __init__(

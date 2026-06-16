@@ -12,6 +12,7 @@ from settings import (
     TILE_SIZE,
     TILE_WALL_COLOR,
 )
+from systems.asset_loader import AssetLoader
 
 FLOOR = 0
 WALL = 1
@@ -23,6 +24,10 @@ _ROWS = 24
 _COLLISION_LAYER = "collision"
 _SPAWNS_LAYER = "spawns"
 _DEFAULT_MAP: Path = MAPS_DIR / "level1.tmx"
+
+# Имена тайловых спрайтов (Sprint 11C); нет файла → fallback на pygame.draw.
+_TILE_WALL_SPRITE = "tile_wall"
+_TILE_FLOOR_SPRITE = "tile_floor"
 
 
 def load_grid_from_tmx(map_path: Path) -> list[list[int]]:
@@ -169,12 +174,13 @@ class GameWorld:
 
         for row in range(row_start, row_end):
             for col in range(col_start, col_end):
-                color = TILE_WALL_COLOR if self._grid[row][col] == WALL else TILE_FLOOR_COLOR
-                pygame.draw.rect(
-                    surface,
-                    color,
-                    (col * ts - ox, row * ts - oy, ts, ts),
-                )
+                is_wall = self._grid[row][col] == WALL
+                rect = pygame.Rect(col * ts - ox, row * ts - oy, ts, ts)
+                name = _TILE_WALL_SPRITE if is_wall else _TILE_FLOOR_SPRITE
+                if not AssetLoader.draw_sprite(surface, name, rect):
+                    pygame.draw.rect(
+                        surface, TILE_WALL_COLOR if is_wall else TILE_FLOOR_COLOR, rect
+                    )
 
     def _compute_wall_rects(self) -> list[pygame.Rect]:
         rects: list[pygame.Rect] = []

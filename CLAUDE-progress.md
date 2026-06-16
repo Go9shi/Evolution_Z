@@ -8,7 +8,7 @@
 ## Текущий статус
 
 **Фаза:** Активная разработка  
-**Спринт:** 11B — TMX Spawn Objects (Phase 2) ✅ (размещение player/enemies/boss/items из object-слоя TMX; GameScreen без координат уровня)  
+**Спринт:** 11C — Sprite Rendering Pipeline ✅ (AssetLoader: загрузка/кэш PNG; спрайты для player/enemies/boss/тайлов с fallback на pygame.draw)  
 **Дата последнего обновления:** 2026-06-14
 
 ---
@@ -499,6 +499,23 @@
 - [x] `ui/game_screen.py` — `load_game` (F9): перед swap снимает подписки СТАРЫХ player/quest_system → повторные загрузки не копят обработчики
 - [x] QuestSystem/Player НЕ модифицированы: их bound-методы снимаются через `EventBus.off` из GameScreen (равенство bound-методов позволяет `list.remove`)
 - [x] `tests/test_eventbus_cleanup.py` — 17 тестов
+
+### Спринт 11C — Sprite Rendering Pipeline ✅ (завершён)
+Цель: первый графический пайплайн — подключаемые PNG-спрайты для сущностей и тайлов, с сохранением fallback на pygame.draw. Только статические изображения (без анимаций/sprite sheets/направлений/состояний).
+- [x] `systems/asset_loader.py` — `AssetLoader`: `get(name)` грузит `SPRITES_DIR/<name>.png` через `pygame.image.load().convert_alpha()`, кэширует (повторный запрос — тот же объект); отсутствующий файл → None (negative cache, без повторных загрузок и падений); `convert_alpha` защищён (без видеорежима отдаёт raw); `draw_sprite(surface,name,rect)→bool`; `clear()`
+- [x] Сущности: `SPRITE`-атрибут + «спрайт или fallback» в `draw` — Player (`player`), WalkerZombie (`zombie_walker`), RunnerZombie (`zombie_runner`), SpitterZombie (`zombie_spitter`), PatientZeroBoss (`boss`). HP-бары рисуются поверх как раньше
+- [x] `GameWorld.draw` — тайлы `tile_wall`/`tile_floor` спрайтом, иначе прежний цветной rect
+- [x] `tests/conftest.py` — autouse-очистка кэша спрайтов (как у EventBus)
+- [x] Fallback сохранён: спрайтов в проекте нет → `get()` даёт None → рендер идентичен прежнему → существующие тесты зелёные
+- [x] `tests/test_asset_loader.py` — 18 тестов
+- [x] Smoke: без ассетов New Game рисуется (fallback) и геймплей идёт; с реальным PNG спрайт грузится/кэшируется и виден (player.rect.center = красный); выстрел работает
+
+### Тесты — 934 теста, все зелёные ✅ (после Спринта 11C)
++18 тестов в `tests/test_asset_loader.py`:
+- AssetLoader: загрузка PNG; кэш (тот же объект); отсутствующий файл → None; negative-cache; имя None → None; clear(); draw_sprite True+blit / False при отсутствии
+- Сущности: Player/WalkerZombie/Boss рисуются спрайтом при наличии файла и fallback-примитивом (по COLOR) при отсутствии — проверка по пикселю центра
+- Тайлы: GameWorld.draw использует тайловые спрайты при наличии и не падает без них
+- Регрессия: в проекте спрайтов нет → все get() = None; полный world.draw без ассетов без исключений
 
 ### Спринт 11B — TMX Spawn Objects (Phase 2) ✅ (завершён)
 Цель: перенести размещение игровых объектов (игрок/враги/босс/предметы) из захардкоженных координат `GameScreen` в TMX object-слой `spawns`. Завершает переход к data-driven level design. Только источник данных; игровые системы не менялись.

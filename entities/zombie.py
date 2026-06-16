@@ -7,6 +7,7 @@ from core.entity import Entity
 from data.enemy_data import EnemyData
 from data.spitter_data import SpitterData
 from entities.bullet import AcidBullet, Bullet
+from systems.asset_loader import AssetLoader
 from systems.event_bus import EventBus
 
 
@@ -28,6 +29,7 @@ class Zombie(Entity, ABC):
     """
 
     COLOR: tuple[int, int, int] = (160, 40, 40)
+    SPRITE: str | None = None  # переопределяется подклассами; None → fallback-примитив
     _PATROL_REVERSE_INTERVAL: float = 3.0
 
     def __init__(self, x: float, y: float, data: EnemyData) -> None:
@@ -95,9 +97,10 @@ class Zombie(Entity, ABC):
     # ── render ─────────────────────────────────────────────────────────────
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
-        """Отрисовка спрайта и HP-бара."""
+        """Отрисовка спрайта (или fallback-примитива) и HP-бара."""
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
-        pygame.draw.rect(surface, self.COLOR, draw_rect)
+        if not AssetLoader.draw_sprite(surface, self.SPRITE, draw_rect):
+            pygame.draw.rect(surface, self.COLOR, draw_rect)
 
         bar_w = self._rect.width
         hp_w = max(0, int(bar_w * self.health.percentage))
@@ -175,6 +178,7 @@ class WalkerZombie(Zombie):
     """Медленный зомби с высоким HP. Патрулирует, преследует при обнаружении, бьёт в ближнем бою."""
 
     COLOR = (180, 50, 50)
+    SPRITE = "zombie_walker"
 
     def update_ai(
         self, dt: float, walls: list[pygame.Rect], player: Entity
@@ -202,6 +206,7 @@ class RunnerZombie(Zombie):
     """Быстрый зомби с низким HP. Агрессивно преследует, атакует быстро и часто."""
 
     COLOR = (220, 80, 30)
+    SPRITE = "zombie_runner"
 
     def update_ai(
         self, dt: float, walls: list[pygame.Rect], player: Entity
@@ -229,6 +234,7 @@ class SpitterZombie(Zombie):
     """Дальнобойный зомби. Плюётся кислотой, отступает при сближении с игроком."""
 
     COLOR = (80, 180, 60)
+    SPRITE = "zombie_spitter"
 
     def __init__(self, x: float, y: float, data: SpitterData) -> None:
         super().__init__(x, y, data)

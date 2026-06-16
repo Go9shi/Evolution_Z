@@ -7,6 +7,7 @@ import pygame
 from core.entity import Entity
 from core.item import Item
 from data.player_data import PlayerData
+from systems.asset_loader import AssetLoader
 from systems.event_bus import EventBus
 from systems.experience import ExperienceComponent
 from systems.hunger import HungerComponent
@@ -22,6 +23,7 @@ class Player(Entity):
     """Игрок. Управляется клавишами WASD, скорость берётся из конфига."""
 
     COLOR = (80, 200, 120)
+    SPRITE: str | None = "player"  # assets/sprites/player.png; None/нет файла → fallback
 
     def __init__(self, x: float, y: float, config: PlayerData) -> None:
         super().__init__(x, y, config.max_health)
@@ -120,8 +122,9 @@ class Player(Entity):
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
-        pygame.draw.rect(surface, self.COLOR, draw_rect)
-        pygame.draw.rect(surface, (255, 255, 255), draw_rect, 2)
+        if not AssetLoader.draw_sprite(surface, self.SPRITE, draw_rect):
+            pygame.draw.rect(surface, self.COLOR, draw_rect)
+            pygame.draw.rect(surface, (255, 255, 255), draw_rect, 2)
 
     def _on_level_up(self, _data: dict) -> None:
         """Начислить одно очко навыка при каждом повышении уровня."""

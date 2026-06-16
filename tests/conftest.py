@@ -1,6 +1,7 @@
 import pygame
 import pytest
 
+from systems.asset_loader import AssetLoader
 from systems.event_bus import EventBus
 
 
@@ -18,3 +19,11 @@ def clean_event_bus():
     EventBus.clear()
     yield
     EventBus.clear()
+
+
+@pytest.fixture(autouse=True)
+def clean_asset_cache():
+    """Очистка кэша спрайтов до и после каждого теста — кэш является глобальным состоянием."""
+    AssetLoader.clear()
+    yield
+    AssetLoader.clear()
