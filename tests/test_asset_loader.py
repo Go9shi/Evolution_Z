@@ -159,10 +159,9 @@ class TestTileSprites:
 
 
 class TestRegression:
-    def test_default_sprites_dir_has_no_assets(self) -> None:
-        # В проекте спрайтов нет → все get() дают None, рендер идёт по fallback.
-        for name in ("player", "zombie_walker", "zombie_runner", "zombie_spitter",
-                     "boss", "tile_wall", "tile_floor"):
+    def test_missing_sprite_returns_none(self, sprites_dir: Path) -> None:
+        # В изолированном пустом каталоге get() даёт None → рендер идёт по fallback.
+        for name in ("missing_player", "missing_zombie", "missing_boss", "missing_tile"):
             assert AssetLoader.get(name) is None
 
     def test_full_world_draw_without_assets(self) -> None:

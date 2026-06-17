@@ -7,7 +7,14 @@ import pygame
 from core.entity import Entity
 from core.item import Item
 from data.player_data import PlayerData
-from systems.asset_loader import AssetLoader
+from settings import PLAYER_ATTACK_ANIM_DURATION
+from systems.animation import (
+    AnimationComponent,
+    AnimState,
+    Facing,
+    draw_animated,
+    facing_from_vector,
+)
 from systems.event_bus import EventBus
 from systems.experience import ExperienceComponent
 from systems.hunger import HungerComponent
@@ -39,6 +46,12 @@ class Player(Entity):
         self._inventory: Inventory = Inventory()
         self._experience: ExperienceComponent = ExperienceComponent()
         self._skill_tree: SkillTree = SkillTree()
+        # Анимация (Sprint 14B): кадры по имени SPRITE; без PNG — статический fallback.
+        self.animation: AnimationComponent = AnimationComponent(self.SPRITE)
+        # Таймер attack-кадра: ставится при выстреле, тикает в update (косметика).
+        self._attack_anim_timer: float = 0.0
+        # Направление взгляда (Sprint 14C.2): обновляется при движении, иначе хранит последнее.
+        self._facing: Facing = Facing.DOWN
         EventBus.on("player_level_up", self._on_level_up)
 
     @property
@@ -89,7 +102,11 @@ class Player(Entity):
         """Выстрелить в direction. Делегирует оружию; возвращает [] без оружия или при кулдауне."""
         if self._weapon is None:
             return []
-        return self._weapon.fire(self.pos, direction)
+        bullets = self._weapon.fire(self.pos, direction)
+        if bullets:
+            # Косметический сигнал для анимации attack; на бой/возврат не влияет.
+            self._attack_anim_timer = PLAYER_ATTACK_ANIM_DURATION
+        return bullets
 
     def update(self, dt: float, walls: list[pygame.Rect] | None = None) -> None:
         """Обработка кулдауна оружия, голода, ввода WASD, перемещения и коллизий."""
@@ -100,8 +117,15 @@ class Player(Entity):
             self.take_damage(self._hunger_damage_rate * dt)
         EventBus.emit("player_hunger_changed", {"percentage": self.hunger.percentage})
 
+        self._attack_anim_timer = max(0.0, self._attack_anim_timer - dt)
         direction = self._read_input()
-        if direction.length_squared() == 0:
+        moving = direction.length_squared() != 0
+        if moving:
+            self._facing = facing_from_vector(direction.x, direction.y, self._facing)
+        self.animation.set_facing(self._facing)
+        self.animation.play(self._anim_state(moving))
+        self.animation.update(dt)
+        if not moving:
             return
         direction.normalize_ip()
         speed = self._speed * dt
@@ -122,9 +146,15 @@ class Player(Entity):
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
-        if not AssetLoader.draw_sprite(surface, self.SPRITE, draw_rect):
+        if not draw_animated(surface, draw_rect, self.animation, self.SPRITE):
             pygame.draw.rect(surface, self.COLOR, draw_rect)
             pygame.draw.rect(surface, (255, 255, 255), draw_rect, 2)
+
+    def _anim_state(self, moving: bool) -> AnimState:
+        """Выбор состояния анимации: attack (после выстрела) > walk (движение) > idle."""
+        if self._attack_anim_timer > 0.0:
+            return AnimState.ATTACK
+        return AnimState.WALK if moving else AnimState.IDLE
 
     def _on_level_up(self, _data: dict) -> None:
         """Начислить одно очко навыка при каждом повышении уровня."""

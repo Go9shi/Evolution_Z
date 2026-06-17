@@ -91,7 +91,11 @@ class TestNpcEntity:
         assert npc.npc_id == "ranger"
         assert npc.dialogue_id == "ranger_intro"
 
-    def test_fallback_draw(self) -> None:
+    def test_fallback_draw(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        # Изолированный пустой каталог → нет npc_*-спрайта → fallback-прямоугольник.
+        from systems.asset_loader import AssetLoader
+        monkeypatch.setattr("systems.asset_loader.SPRITES_DIR", tmp_path)
+        AssetLoader.clear()
         npc = NPC(50.0, 50.0, "ranger", "d")
         surf = pygame.Surface((120, 120))
         surf.fill((0, 0, 0))

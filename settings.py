@@ -51,6 +51,12 @@ BOSS_PATROL_ARRIVE_DIST: float = 8.0
 NPC_INTERACTION_RANGE: float = 96.0
 NPC_SIZE: int = 32
 
+# Анимации (Sprint 14B). Кадровая анимация поверх существующего AssetLoader; без PNG —
+# статический SPRITE-fallback (геймплей не меняется).
+ANIMATION_FPS: float = 8.0
+# Сколько секунд держится attack-кадр игрока после выстрела (косметика, не влияет на бой).
+PLAYER_ATTACK_ANIM_DURATION: float = 0.2
+
 # Тайлы
 TILE_SIZE: int = 32
 TILE_FLOOR_COLOR: tuple[int, int, int] = (45, 45, 55)

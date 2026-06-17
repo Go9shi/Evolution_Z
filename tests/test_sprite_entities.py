@@ -112,8 +112,8 @@ class TestFallback:
         surf.fill((0, 0, 0))
         assert center_pixel(quest(), surf) == QuestItem.COLOR
 
-    def test_no_assets_in_project(self) -> None:
-        # В проекте PNG нет → все новые id дают None (рендер по fallback).
+    def test_missing_ids_return_none(self, sprites_dir: Path) -> None:
+        # В изолированном пустом каталоге id без PNG дают None (рендер по fallback).
         for name in ("bullet", "acid_bullet", "item_food", "item_quest"):
             assert AssetLoader.get(name) is None
 

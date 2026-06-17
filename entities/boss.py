@@ -28,7 +28,13 @@ from settings import (
     BOSS_XP_REWARD,
     TILE_SIZE,
 )
-from systems.asset_loader import AssetLoader
+from systems.animation import (
+    AnimationComponent,
+    AnimState,
+    Facing,
+    draw_animated,
+    facing_from_vector,
+)
 from systems.event_bus import EventBus
 
 
@@ -52,6 +58,10 @@ class Boss(Entity):
         self.faction = "enemy"
         self._rect: pygame.Rect = pygame.Rect(0, 0, width, height)
         self._rect.center = (int(x), int(y))
+        # Анимация (Sprint 14B): idle/walk/attack/death; без PNG — статический fallback.
+        self.animation: AnimationComponent = AnimationComponent(self.SPRITE)
+        # Направление взгляда (Sprint 14C.2): по вектору на игрока, иначе последнее.
+        self._facing: Facing = Facing.DOWN
 
     @property
     def rect(self) -> pygame.Rect:
@@ -68,12 +78,14 @@ class Boss(Entity):
         was_alive = self.is_alive
         super().take_damage(amount)
         if was_alive and not self.is_alive:
+            # Одноразовая death-анимация (рендер гейтится active в GameScreen — не меняем).
+            self.animation.play(AnimState.DEATH)
             EventBus.emit("boss_defeated", {"boss": self})
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
-        """Отрисовка спрайта (или fallback-примитива) босса с полоской HP."""
+        """Отрисовка кадра анимации (или статический спрайт / примитив) босса с полоской HP."""
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
-        if not AssetLoader.draw_sprite(surface, self.SPRITE, draw_rect):
+        if not draw_animated(surface, draw_rect, self.animation, self.SPRITE):
             pygame.draw.rect(surface, self.COLOR, draw_rect)
 
         bar_w = self._rect.width
@@ -182,6 +194,12 @@ class PatientZeroBoss(Boss):
         self._attack_timer = max(0.0, self._attack_timer - dt)
         self._acid_timer = max(0.0, self._acid_timer - dt)
         self._summon_timer = max(0.0, self._summon_timer - dt)
+        if player is not None:
+            d = player.pos - self.pos
+            self._facing = facing_from_vector(d.x, d.y, self._facing)
+        self.animation.set_facing(self._facing)
+        self.animation.play(self._anim_state(player))
+        self.animation.update(dt)
         if player is None:
             return
 
@@ -281,6 +299,18 @@ class PatientZeroBoss(Boss):
         self._move_toward(self.patrol_target, walls, dt * BOSS_PATROL_SPEED_FACTOR)
 
     # ── вспомогательные (зеркало Zombie) ───────────────────────────────────
+
+    def _anim_state(self, player: Entity | None) -> AnimState:
+        """Состояние анимации: death (мёртв) > attack (в радиусе) > walk (видит) > idle."""
+        if not self.is_alive:
+            return AnimState.DEATH
+        if player is None:
+            return AnimState.IDLE
+        if self._in_attack_range(player.pos):
+            return AnimState.ATTACK
+        if self._detect_player(player.pos):
+            return AnimState.WALK
+        return AnimState.IDLE
 
     def _detect_player(self, player_pos: pygame.Vector2) -> bool:
         """True, если игрок в радиусе обнаружения."""

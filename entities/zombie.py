@@ -7,7 +7,13 @@ from core.entity import Entity
 from data.enemy_data import EnemyData
 from data.spitter_data import SpitterData
 from entities.bullet import AcidBullet, Bullet
-from systems.asset_loader import AssetLoader
+from systems.animation import (
+    AnimationComponent,
+    AnimState,
+    Facing,
+    draw_animated,
+    facing_from_vector,
+)
 from systems.event_bus import EventBus
 
 
@@ -19,6 +25,17 @@ class AIState(Enum):
     CHASE = auto()
     ATTACK = auto()
     REPOSITION = auto()
+
+
+# AI-состояние → состояние анимации. Любое движение (патруль/погоня/отступление) — walk;
+# атака — attack; покой — idle. (Death у обычных врагов вне скоупа 14B.)
+_ANIM_FROM_AISTATE: dict[AIState, AnimState] = {
+    AIState.IDLE: AnimState.IDLE,
+    AIState.PATROL: AnimState.WALK,
+    AIState.CHASE: AnimState.WALK,
+    AIState.REPOSITION: AnimState.WALK,
+    AIState.ATTACK: AnimState.ATTACK,
+}
 
 
 class Zombie(Entity, ABC):
@@ -42,6 +59,10 @@ class Zombie(Entity, ABC):
         self._patrol_dir: pygame.Vector2 = pygame.Vector2(1, 0)
         self._rect: pygame.Rect = pygame.Rect(0, 0, data.width, data.height)
         self._rect.center = (int(x), int(y))
+        # Анимация (Sprint 14B): prefix = SPRITE подкласса; без PNG — статический fallback.
+        self.animation: AnimationComponent = AnimationComponent(self.SPRITE)
+        # Направление взгляда (Sprint 14C.2): по вектору на игрока, иначе последнее.
+        self._facing: Facing = Facing.DOWN
 
     # ── public properties ──────────────────────────────────────────────────
 
@@ -73,10 +94,15 @@ class Zombie(Entity, ABC):
         walls: list[pygame.Rect] | None = None,
         player: Entity | None = None,
     ) -> None:
-        """Template Method: декремент таймеров → хук update_ai."""
+        """Template Method: декремент таймеров → хук update_ai → шаг анимации."""
         self._attack_timer = max(0.0, self._attack_timer - dt)
         if player is not None:
             self.update_ai(dt, walls or [], player)
+            d = player.pos - self.pos
+            self._facing = facing_from_vector(d.x, d.y, self._facing)
+        self.animation.set_facing(self._facing)
+        self.animation.play(_ANIM_FROM_AISTATE[self._state])
+        self.animation.update(dt)
 
     # ── abstract hooks ─────────────────────────────────────────────────────
 
@@ -97,9 +123,9 @@ class Zombie(Entity, ABC):
     # ── render ─────────────────────────────────────────────────────────────
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
-        """Отрисовка спрайта (или fallback-примитива) и HP-бара."""
+        """Отрисовка кадра анимации (или статический спрайт / fallback-примитив) и HP-бара."""
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
-        if not AssetLoader.draw_sprite(surface, self.SPRITE, draw_rect):
+        if not draw_animated(surface, draw_rect, self.animation, self.SPRITE):
             pygame.draw.rect(surface, self.COLOR, draw_rect)
 
         bar_w = self._rect.width
@@ -221,7 +247,9 @@ class RunnerZombie(Zombie):
             self._state = AIState.CHASE
             self._move_toward(player_pos, walls, dt)
         else:
-            self._state = AIState.IDLE
+            # Вне боя раннер патрулирует (движется) — состояние PATROL, как у Walker, чтобы
+            # анимация показывала walk, а не статичный idle (Sprint 14C.5). _patrol не меняется.
+            self._state = AIState.PATROL
             self._patrol(walls, dt)
 
     def attack(self, target: Entity) -> None:

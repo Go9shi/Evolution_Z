@@ -134,10 +134,10 @@ def test_walker_attacks_when_in_range(walker):
 
 # ── RunnerZombie AI states ─────────────────────────────────────────────────
 
-def test_runner_idles_when_player_far(runner):
+def test_runner_patrols_when_player_far(runner):
     player = Entity(FAR_POS.x, FAR_POS.y, 100)
     runner.update(dt=0.1, walls=[], player=player)
-    assert runner.state == AIState.IDLE
+    assert runner.state == AIState.PATROL
 
 
 def test_runner_chases_when_detected(runner):
@@ -205,7 +205,7 @@ def test_both_enemies_share_update_interface(walker, runner):
     for enemy in [walker, runner]:
         enemy.update(dt=0.1, walls=[], player=player)
     assert walker.state == AIState.PATROL
-    assert runner.state == AIState.IDLE
+    assert runner.state == AIState.PATROL
 
 
 # ── integration ────────────────────────────────────────────────────────────
