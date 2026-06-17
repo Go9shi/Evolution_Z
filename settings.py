@@ -56,6 +56,9 @@ NPC_SIZE: int = 32
 ANIMATION_FPS: float = 8.0
 # Сколько секунд держится attack-кадр игрока после выстрела (косметика, не влияет на бой).
 PLAYER_ATTACK_ANIM_DURATION: float = 0.2
+# Длительность вспышки врага при попадании (Sprint 15B). Чисто визуальный фидбэк.
+HIT_FLASH_DURATION: float = 0.08
+HIT_FLASH_COLOR: tuple[int, int, int, int] = (255, 255, 255, 130)
 
 # Тайлы
 TILE_SIZE: int = 32

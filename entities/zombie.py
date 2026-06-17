@@ -7,6 +7,7 @@ from core.entity import Entity
 from data.enemy_data import EnemyData
 from data.spitter_data import SpitterData
 from entities.bullet import AcidBullet, Bullet
+from settings import HIT_FLASH_COLOR, HIT_FLASH_DURATION
 from systems.animation import (
     AnimationComponent,
     AnimState,
@@ -55,6 +56,7 @@ class Zombie(Entity, ABC):
         self._data: EnemyData = data
         self._state: AIState = AIState.IDLE
         self._attack_timer: float = 0.0
+        self._hit_flash: float = 0.0  # таймер вспышки при попадании (Sprint 15B)
         self._patrol_timer: float = self._PATROL_REVERSE_INTERVAL
         self._patrol_dir: pygame.Vector2 = pygame.Vector2(1, 0)
         self._rect: pygame.Rect = pygame.Rect(0, 0, data.width, data.height)
@@ -96,6 +98,7 @@ class Zombie(Entity, ABC):
     ) -> None:
         """Template Method: декремент таймеров → хук update_ai → шаг анимации."""
         self._attack_timer = max(0.0, self._attack_timer - dt)
+        self._hit_flash = max(0.0, self._hit_flash - dt)
         if player is not None:
             self.update_ai(dt, walls or [], player)
             d = player.pos - self.pos
@@ -116,6 +119,12 @@ class Zombie(Entity, ABC):
     def attack(self, target: Entity) -> None:
         """Атака цели. Каждый подкласс атакует по-своему (melee / ranged)."""
 
+    def take_damage(self, amount: float) -> None:
+        """Получить урон и, если выжил, запустить кратковременную вспышку попадания (Sprint 15B)."""
+        super().take_damage(amount)
+        if self.is_alive:
+            self._hit_flash = HIT_FLASH_DURATION
+
     def collect_spawned_bullets(self) -> list[Bullet]:
         """Возвращает снаряды, созданные с последнего вызова. По умолчанию — пусто."""
         return []
@@ -127,6 +136,10 @@ class Zombie(Entity, ABC):
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
         if not draw_animated(surface, draw_rect, self.animation, self.SPRITE):
             pygame.draw.rect(surface, self.COLOR, draw_rect)
+        if self._hit_flash > 0.0:
+            flash = pygame.Surface(draw_rect.size, pygame.SRCALPHA)
+            flash.fill(HIT_FLASH_COLOR)
+            surface.blit(flash, draw_rect.topleft)
 
         bar_w = self._rect.width
         hp_w = max(0, int(bar_w * self.health.percentage))

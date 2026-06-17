@@ -78,6 +78,8 @@ class GameScreen(BaseScreen):
         self._game_over: bool = False
         self._cleaned: bool = False
         self._font_victory = pygame.font.SysFont("monospace", 44, bold=True)
+        # Подсказки (Sprint 15B): «Press ENTER» на терминале и «Press T» у NPC.
+        self._font_hint = pygame.font.SysFont("monospace", 18, bold=True)
         self._hud = HUD()
         self._combat = CombatSystem()
         self._world_items: list[Item] = self._spawn_items(spawns)
@@ -238,21 +240,39 @@ class GameScreen(BaseScreen):
             self._boss.draw(surface, self._camera.offset)
         self._combat.draw(surface, self._camera.offset)
         self._player.draw(surface, self._camera.offset)
+        if not (self._victory or self._game_over):
+            self._draw_npc_hint(surface)
         self._hud.draw(surface, self._player, self._quest_system)
         if self._victory:
             self._draw_victory(surface)
         elif self._game_over:
             self._draw_game_over(surface)
 
+    def _draw_npc_hint(self, surface: pygame.Surface) -> None:
+        """Подсказка «Press T to Talk» над ближайшим NPC в радиусе (Sprint 15B)."""
+        npc = self._nearest_npc()
+        if npc is None:
+            return
+        rect = npc.rect.move(-int(self._camera.offset.x), -int(self._camera.offset.y))
+        text = self._font_hint.render("Press T to Talk", True, (240, 240, 160))
+        surface.blit(text, text.get_rect(center=(rect.centerx, rect.top - 10)))
+
     def _draw_victory(self, surface: pygame.Surface) -> None:
-        """Минимальный победный результат: центрированное текстовое сообщение."""
+        """Победный результат: сообщение + подсказка возврата в меню."""
         text = self._font_victory.render("VICTORY — PATIENT ZERO DEFEATED", True, (240, 230, 120))
         surface.blit(text, text.get_rect(center=(SCREEN_W // 2, SCREEN_H // 2)))
+        self._draw_return_hint(surface)
 
     def _draw_game_over(self, surface: pygame.Surface) -> None:
-        """Минимальный экран поражения: центрированный текст GAME OVER."""
+        """Экран поражения: GAME OVER + подсказка возврата в меню."""
         text = self._font_victory.render("GAME OVER", True, (210, 60, 60))
         surface.blit(text, text.get_rect(center=(SCREEN_W // 2, SCREEN_H // 2)))
+        self._draw_return_hint(surface)
+
+    def _draw_return_hint(self, surface: pygame.Surface) -> None:
+        """Подсказка «Press ENTER to return to menu» под терминальным сообщением (Sprint 15B)."""
+        hint = self._font_hint.render("Press ENTER to return to menu", True, (230, 230, 235))
+        surface.blit(hint, hint.get_rect(center=(SCREEN_W // 2, SCREEN_H // 2 + 44)))
 
     # ── private helpers ────────────────────────────────────────────────────
 

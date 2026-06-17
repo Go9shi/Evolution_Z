@@ -12,10 +12,10 @@
     },
     "runner": {
         "max_health": 30,
-        "speed": 140.0,
+        "speed": 235.0,
         "damage": 8.0,
         "attack_range": 36.0,
-        "detection_range": 240.0,
+        "detection_range": 320.0,
         "attack_cooldown": 0.8,
         "width": 28,
         "height": 28,

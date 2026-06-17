@@ -26,6 +26,8 @@ from settings import (
     BOSS_SUMMON_COOLDOWN,
     BOSS_SUMMON_MAX,
     BOSS_XP_REWARD,
+    HIT_FLASH_COLOR,
+    HIT_FLASH_DURATION,
     TILE_SIZE,
 )
 from systems.animation import (
@@ -62,6 +64,7 @@ class Boss(Entity):
         self.animation: AnimationComponent = AnimationComponent(self.SPRITE)
         # Направление взгляда (Sprint 14C.2): по вектору на игрока, иначе последнее.
         self._facing: Facing = Facing.DOWN
+        self._hit_flash: float = 0.0  # таймер вспышки при попадании (Sprint 15B)
 
     @property
     def rect(self) -> pygame.Rect:
@@ -81,12 +84,18 @@ class Boss(Entity):
             # Одноразовая death-анимация (рендер гейтится active в GameScreen — не меняем).
             self.animation.play(AnimState.DEATH)
             EventBus.emit("boss_defeated", {"boss": self})
+        elif self.is_alive:
+            self._hit_flash = HIT_FLASH_DURATION  # вспышка попадания (Sprint 15B)
 
     def draw(self, surface: pygame.Surface, offset: pygame.Vector2) -> None:
         """Отрисовка кадра анимации (или статический спрайт / примитив) босса с полоской HP."""
         draw_rect = self._rect.move(-int(offset.x), -int(offset.y))
         if not draw_animated(surface, draw_rect, self.animation, self.SPRITE):
             pygame.draw.rect(surface, self.COLOR, draw_rect)
+        if self._hit_flash > 0.0:
+            flash = pygame.Surface(draw_rect.size, pygame.SRCALPHA)
+            flash.fill(HIT_FLASH_COLOR)
+            surface.blit(flash, draw_rect.topleft)
 
         bar_w = self._rect.width
         hp_w = max(0, int(bar_w * self.health.percentage))
@@ -194,6 +203,7 @@ class PatientZeroBoss(Boss):
         self._attack_timer = max(0.0, self._attack_timer - dt)
         self._acid_timer = max(0.0, self._acid_timer - dt)
         self._summon_timer = max(0.0, self._summon_timer - dt)
+        self._hit_flash = max(0.0, self._hit_flash - dt)
         if player is not None:
             d = player.pos - self.pos
             self._facing = facing_from_vector(d.x, d.y, self._facing)

@@ -3,7 +3,7 @@
         "damage": 25.0,
         "fire_rate": 2.0,
         "bullet_speed": 400.0,
-        "bullet_range": 350.0,
+        "bullet_range": 230.0,
         "bullet_size": 5
     },
     "rifle": {

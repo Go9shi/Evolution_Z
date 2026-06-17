@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pygame
 
-from settings import SCREEN_W
+from settings import SCREEN_H, SCREEN_W
 
 if TYPE_CHECKING:
     from entities.player import Player
@@ -27,6 +27,14 @@ _COL_QUEST_PROGRESS = (150, 200, 255)
 
 _QUEST_PANEL_W = 320
 
+# Подсказки управления (Sprint 15B): постоянная памятка в левом-нижнем углу.
+_CONTROLS: tuple[str, ...] = (
+    "WASD Move", "LMB Shoot", "T Talk", "F Food", "I Inventory",
+    "J Quests", "TAB Skills", "F5 Save", "F9 Load",
+)
+_COL_CONTROLS = (170, 170, 180)
+_CONTROLS_LINE_H = 16
+
 
 class HUD:
     """Постоянный игровой оверлей: HP, голод, уровень/XP, трекер активных квестов.
@@ -44,6 +52,16 @@ class HUD:
         """Отрисовать HUD по актуальным данным игрока и системы квестов."""
         self._draw_status(surface, player)
         self._draw_quests(surface, quest_system)
+        self._draw_controls(surface)
+
+    # ── подсказки управления (слева снизу) ───────────────────────────────────
+
+    def _draw_controls(self, surface: pygame.Surface) -> None:
+        """Постоянная памятка управления в левом-нижнем углу (Sprint 15B)."""
+        y = SCREEN_H - _PAD - len(_CONTROLS) * _CONTROLS_LINE_H
+        for line in _CONTROLS:
+            surface.blit(self._font_small.render(line, True, _COL_CONTROLS), (_PAD, y))
+            y += _CONTROLS_LINE_H
 
     # ── статус игрока (слева сверху) ─────────────────────────────────────────
 
