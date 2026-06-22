@@ -1,0 +1,32 @@
+{
+  "dialogues": [
+    {
+      "id": "ranger_intro",
+      "start_id": "greet",
+      "nodes": [
+        {
+          "id": "greet",
+          "speaker": "Ranger",
+          "text": "Stop right there. Are you infected?",
+          "choices": [
+            { "text": "No. I'll help clear the bunker.", "next_id": "survivor", "quest_id": "clear_bunker_a1" },
+            { "text": "...", "next_id": "silent" }
+          ]
+        },
+        {
+          "id": "survivor",
+          "speaker": "Ranger",
+          "text": "Good. Clear the infected from Bunker A1, then take this vaccine component.",
+          "choices": [
+            { "text": "Thank you.", "next_id": "", "lore_id": "bunker_a1_origin" }
+          ]
+        },
+        {
+          "id": "silent",
+          "speaker": "Ranger",
+          "text": "Suit yourself. Don't get in my way."
+        }
+      ]
+    }
+  ]
+}

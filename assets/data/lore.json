@@ -1,0 +1,10 @@
+{
+  "lore": [
+    {
+      "id": "bunker_a1_origin",
+      "title": "Bunker A1 — Medical Storage",
+      "text": "Before the outbreak, this bunker stored medical samples for Project EDEN. The pathogen was never meant to leave these walls.",
+      "category": "terminal"
+    }
+  ]
+}

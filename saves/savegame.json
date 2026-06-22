@@ -1,0 +1,19 @@
+{
+  "player": {
+    "xp": 0,
+    "level": 1
+  },
+  "skills": {
+    "MAX_HEALTH": 0,
+    "HUNGER_EFFICIENCY": 0,
+    "PISTOL_DAMAGE": 0
+  },
+  "inventory": [
+    "canned_beans"
+  ],
+  "quests": {
+    "active": [],
+    "completed": []
+  },
+  "lore": []
+}
